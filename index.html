@@ -127,12 +127,15 @@ async function boot(){
   $("ser").onchange = e => { st.series = e.target.value; st.set = ""; st.page = 0; render(); };
   $("set").onchange = e => { st.set = e.target.value; st.page = 0; render(); };
   $("sort").onchange = e => { st.sort = e.target.value; st.page = 0; render(); };
-  const [{ data:sets }, { data:series }] = await Promise.all([
-    sb.from("sets").select("id,name,game_id,series_id,release_date").limit(5000),
-    sb.from("series").select("id,name,game_id").limit(1000)]);
-  st.sets = sets || []; st.seriesList = series || [];
+  [st.sets, st.seriesList] = await Promise.all([fetchAll("sets", "id,name,game_id,series_id,release_date,language"), fetchAll("series", "id,name,game_id,sort_order")]);
   await loadCollection();
   render();
+}
+async function fetchAll(table, cols){
+  const out = []; let from = 0;
+  while (from < 20000) { const { data, error } = await sb.from(table).select(cols).order("id").range(from, from + 999);
+    if (error || !data || !data.length) break; out.push(...data); if (data.length < 1000) break; from += 1000; }
+  return out;
 }
 function chips(id, opts, get, set){
   const box = $(id);
@@ -142,9 +145,9 @@ function chips(id, opts, get, set){
 }
 function syncLayers(){
   const inGame = s => st.game === "all" || s.game_id === st.game;
-  const serOpts = st.seriesList.filter(inGame);
+  const serOpts = st.seriesList.filter(inGame).sort((a,b) => a.game_id.localeCompare(b.game_id) || (b.sort_order ?? -1) - (a.sort_order ?? -1) || a.name.localeCompare(b.name));
   $("ser").innerHTML = `<option value="">All series</option>` + serOpts.map(s => `<option value="${s.id}" ${String(s.id)===st.series?"selected":""}>${esc((st.game==="all"?GNAME[s.game_id]+" · ":"") + s.name)}</option>`).join("");
-  const setOpts = st.sets.filter(s => inGame(s) && (!st.series || String(s.series_id) === st.series)).sort((a,b) => a.name.localeCompare(b.name));
+  const setOpts = st.sets.filter(s => inGame(s) && (!st.series || String(s.series_id) === st.series)).sort((a,b) => String(b.release_date||"").localeCompare(String(a.release_date||"")) || a.name.localeCompare(b.name));
   $("set").innerHTML = `<option value="">All sets</option>` + setOpts.map(s => `<option value="${s.id}" ${String(s.id)===st.set?"selected":""}>${esc((st.game==="all"?GNAME[s.game_id]+" · ":"") + s.name)}</option>`).join("");
 }
 
