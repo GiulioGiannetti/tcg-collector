@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sold Ledger</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<style>
+:root{--bg:#EEF1F5;--surface:#fff;--ink:#172033;--muted:#5B6577;--line:#D6DCE5;--accent:#3346C9;--accent-soft:#E3E7FB;--chip:#F5F7FA;
+  box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+  font-family:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif}
+@media (prefers-color-scheme:dark){:root{--bg:#0F1523;--surface:#182033;--ink:#E7ECF5;--muted:#97A1B5;--line:#2A3450;--accent:#8A9BFF;--accent-soft:#232D4E;--chip:#1E2740}}
+*,*::before,*::after{box-sizing:inherit}
+body{margin:0;background:var(--bg);color:var(--ink);font-size:15px;line-height:1.45}
+button,select,input{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.wrap{max-width:900px;margin:0 auto;padding:0 16px 48px}
+header{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding:14px 0 10px;border-bottom:1px solid var(--line)}
+.brand{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+h1{font-family:"Bricolage Grotesque",sans-serif;font-size:26px;margin:0;letter-spacing:-.02em}
+.link{background:none;border:0;color:var(--accent);cursor:pointer;padding:4px}
+.tabs{display:flex;gap:4px;margin-top:12px;background:var(--chip);border-radius:10px;padding:4px}
+.tabs button{flex:1;border:0;background:transparent;padding:8px;border-radius:7px;font-weight:600;color:var(--muted);cursor:pointer}
+.tabs button[aria-selected="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 0 var(--line)}
+.filters{display:grid;gap:10px;margin:14px 0 8px}
+.group{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.group>span{font-size:12.5px;color:var(--muted);min-width:64px}
+.chip{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:5px 11px;font-size:13px;cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--surface)}
+select,.search{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:7px 9px;max-width:100%}
+.search{flex:1 1 220px}
+.summary{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin:12px 0 4px;flex-wrap:wrap}
+.summary b{font-family:"Bricolage Grotesque",sans-serif;font-size:28px;letter-spacing:-.02em}
+.muted{color:var(--muted)}.small{font-size:12.5px}
+ul.list{list-style:none;margin:8px 0 0;padding:0;background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.item{display:flex;gap:12px;align-items:center;padding:10px 14px;border-top:1px solid var(--line);cursor:pointer}
+.item:first-child{border-top:0}
+.thumb{flex:0 0 auto;width:46px;aspect-ratio:63/88;border-radius:4px;background:var(--chip);object-fit:cover;border:1px solid var(--line)}
+.thumb.sealed{aspect-ratio:1/1;object-fit:contain}
+.meta{flex:1;min-width:0}.name{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tag{display:inline-block;font-size:11px;padding:1px 6px;border-radius:4px;background:var(--accent-soft);color:var(--accent);margin-right:6px;font-weight:600}
+.right{text-align:right;font-size:12.5px;color:var(--muted);white-space:nowrap}
+.right b{display:block;color:var(--ink);font-family:"Bricolage Grotesque",sans-serif;font-size:17px}
+.pager{display:flex;justify-content:space-between;align-items:center;margin-top:10px}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:7px 12px;cursor:pointer}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--surface);font-weight:600}
+.btn:disabled{opacity:.5;cursor:default}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:22px;margin-top:40px}
+.card input{width:100%;margin:10px 0}
+.empty{padding:28px;text-align:center;color:var(--muted)}
+.scrim{position:fixed;inset:0;background:rgba(10,14,25,.45);display:none;z-index:20}.scrim.open{display:block}
+.sheet{position:fixed;left:0;right:0;bottom:0;max-height:90%;overflow:auto;background:var(--surface);border-radius:16px 16px 0 0;z-index:21;
+  padding:18px 18px calc(18px + env(safe-area-inset-bottom,0px));transform:translateY(105%);transition:transform .2s;max-width:760px;margin:0 auto}
+.sheet.open{transform:none}
+@media (prefers-reduced-motion:reduce){.sheet{transition:none}}
+.sheet img{width:180px;max-width:60%;border-radius:8px;display:block;margin:4px 0 12px}
+.sheet h2{font-family:"Bricolage Grotesque",sans-serif;margin:0 0 4px;font-size:22px}
+.close{float:right;border:0;background:var(--chip);border-radius:999px;width:32px;height:32px;cursor:pointer;font-size:18px}
+.note{border:1px dashed var(--line);border-radius:10px;padding:10px 12px;margin-top:12px;font-size:13.5px;color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+<div class="scrim" id="scrim"></div>
+<div class="sheet" id="sheet" role="dialog" aria-modal="true"></div>
+<script>
+// ---- config: the publishable (anon) key is safe in browser code; your data is protected by row-level security ----
+const SUPABASE_URL = "https://nkjxyelfekgfjlfxkkvk.supabase.co";
+const SUPABASE_ANON_KEY = "PASTE_PUBLISHABLE_KEY_HERE";
+
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const GAMES = [["pokemon","Pokémon"],["one-piece","One Piece"],["dragon-ball","Dragon Ball"],["magic","Magic"],["yugioh","Yu-Gi-Oh!"]];
+const GNAME = Object.fromEntries(GAMES);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const $ = id => document.getElementById(id);
+const st = { tab:"collection", game:"all", lang:"all", kind:"all", series:"", set:"", q:"", sort:"name", page:0, sets:[], series:[], col:[] , loading:false };
+const PAGE = 60;
+
+// ---------- auth ----------
+async function init(){
+  if (SUPABASE_ANON_KEY.startsWith("PASTE")) { $("app").innerHTML = `<div class="card"><h1>Almost there</h1><p class="muted">Add the Supabase publishable key to index.html to connect the app.</p></div>`; return; }
+  const { data:{ session } } = await sb.auth.getSession();
+  sb.auth.onAuthStateChange((_e, s) => { if (s && !window.__booted) boot(); if (!s) loginView(); });
+  session ? boot() : loginView();
+}
+function loginView(){
+  window.__booted = false;
+  $("app").innerHTML = `<div class="card"><h1>Sold Ledger</h1><p class="muted">Sign in with your email. We'll send you a one-tap link.</p>
+    <input class="search" id="email" type="email" autocomplete="email" placeholder="you@example.com">
+    <button class="btn primary" id="send">Send sign-in link</button><p class="small muted" id="msg"></p></div>`;
+  $("send").onclick = async () => {
+    const email = $("email").value.trim(); if (!email) return;
+    $("send").disabled = true;
+    const { error } = await sb.auth.signInWithOtp({ email, options:{ emailRedirectTo: location.origin + location.pathname } });
+    $("msg").textContent = error ? "Couldn't send: " + error.message : "Check your email and tap the link.";
+    $("send").disabled = false;
+  };
+}
+
+// ---------- shell ----------
+async function boot(){
+  window.__booted = true;
+  $("app").innerHTML = `<header><div class="brand"><h1>Sold Ledger</h1><button class="link" id="out">Sign out</button></div>
+    <div class="tabs" role="tablist"><button role="tab" data-t="collection">Collection</button><button role="tab" data-t="catalog">Catalog</button></div></header>
+    <div class="filters">
+      <div class="group"><input class="search" id="q" type="search" placeholder="Search name or card number"></div>
+      <div class="group" id="g"><span>Game</span></div>
+      <div class="group" id="l"><span>Language</span></div>
+      <div class="group" id="k"><span>Type</span></div>
+      <div class="group"><span>Series</span><select id="ser"></select></div>
+      <div class="group"><span>Set</span><select id="set"></select></div>
+      <div class="group"><span>Sort by</span><select id="sort">
+        <option value="name">Name: A to Z</option><option value="-name">Name: Z to A</option>
+        <option value="set">Set, then card number</option><option value="newest">Newest set first</option><option value="oldest">Oldest set first</option>
+        <option value="added">Recently added</option><option value="qty">Most copies</option></select></div>
+    </div>
+    <div class="summary" id="sum"></div><ul class="list" id="list"></ul><div class="pager" id="pager"></div>`;
+  $("out").onclick = () => sb.auth.signOut();
+  document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => { st.tab = b.dataset.t; st.page = 0; render(); });
+  chips("g", [["all","All"],...GAMES], () => st.game, v => { st.game = v; st.series = ""; st.set = ""; });
+  chips("l", [["all","All"],["EN","English"],["JP","Japanese"]], () => st.lang, v => st.lang = v);
+  chips("k", [["all","All"],["card","Cards"],["sealed","Sealed"]], () => st.kind, v => st.kind = v);
+  let t; $("q").oninput = e => { clearTimeout(t); t = setTimeout(() => { st.q = e.target.value.trim(); st.page = 0; render(); }, 250); };
+  $("ser").onchange = e => { st.series = e.target.value; st.set = ""; st.page = 0; render(); };
+  $("set").onchange = e => { st.set = e.target.value; st.page = 0; render(); };
+  $("sort").onchange = e => { st.sort = e.target.value; st.page = 0; render(); };
+  const [{ data:sets }, { data:series }] = await Promise.all([
+    sb.from("sets").select("id,name,game_id,series_id,release_date").limit(5000),
+    sb.from("series").select("id,name,game_id").limit(1000)]);
+  st.sets = sets || []; st.series = series || [];
+  await loadCollection();
+  render();
+}
+function chips(id, opts, get, set){
+  const box = $(id);
+  opts.forEach(([v,label]) => { const b = document.createElement("button"); b.className = "chip"; b.type = "button"; b.textContent = label; b.dataset.v = v;
+    b.onclick = () => { set(v); st.page = 0; render(); }; box.appendChild(b); });
+  box._sync = () => box.querySelectorAll(".chip").forEach(b => b.setAttribute("aria-pressed", String(get() === b.dataset.v)));
+}
+function syncLayers(){
+  const inGame = s => st.game === "all" || s.game_id === st.game;
+  const serOpts = st.series.filter(inGame);
+  $("ser").innerHTML = `<option value="">All series</option>` + serOpts.map(s => `<option value="${s.id}" ${String(s.id)===st.series?"selected":""}>${esc((st.game==="all"?GNAME[s.game_id]+" · ":"") + s.name)}</option>`).join("");
+  const setOpts = st.sets.filter(s => inGame(s) && (!st.series || String(s.series_id) === st.series)).sort((a,b) => a.name.localeCompare(b.name));
+  $("set").innerHTML = `<option value="">All sets</option>` + setOpts.map(s => `<option value="${s.id}" ${String(s.id)===st.set?"selected":""}>${esc((st.game==="all"?GNAME[s.game_id]+" · ":"") + s.name)}</option>`).join("");
+}
+
+// ---------- data ----------
+const PCOLS = "id,name,card_number,variant,language,kind,image_url,game_id,set_id,rarity,sets(name,release_date,series_id,series(name))";
+async function loadCollection(){
+  st.col = []; let from = 0;
+  while (true) {
+    const { data, error } = await sb.from("collection_items").select(`id,quantity,condition,grade,date_added,cost_paid,products(${PCOLS})`).range(from, from + 999);
+    if (error || !data || !data.length) break;
+    st.col.push(...data); if (data.length < 1000) break; from += 1000;
+  }
+}
+const setDate = p => p.sets?.release_date || "";
+const numKey = n => { const m = String(n||"").match(/(\d+)/); return m ? +m[1] : 99999; };
+function sortRows(rows, getP, getC){
+  const by = {
+    "name": (a,b) => getP(a).name.localeCompare(getP(b).name),
+    "-name": (a,b) => getP(b).name.localeCompare(getP(a).name),
+    "set": (a,b) => (getP(a).sets?.name||"").localeCompare(getP(b).sets?.name||"") || numKey(getP(a).card_number) - numKey(getP(b).card_number),
+    "newest": (a,b) => setDate(getP(b)).localeCompare(setDate(getP(a))) || getP(a).name.localeCompare(getP(b).name),
+    "oldest": (a,b) => setDate(getP(a)).localeCompare(setDate(getP(b))) || getP(a).name.localeCompare(getP(b).name),
+    "added": (a,b) => String(getC?.(b)?.date_added||"").localeCompare(String(getC?.(a)?.date_added||"")),
+    "qty": (a,b) => (getC?.(b)?.quantity||0) - (getC?.(a)?.quantity||0)};
+  return rows.sort(by[st.sort] || by.name);
+}
+function matchP(p){
+  if (!p) return false;
+  const q = st.q.toLowerCase();
+  return (st.game === "all" || p.game_id === st.game) && (st.lang === "all" || p.language === st.lang)
+    && (st.kind === "all" || p.kind === st.kind) && (!st.set || String(p.set_id) === st.set)
+    && (!st.series || String(p.sets?.series_id) === st.series)
+    && (!q || (p.name + " " + p.card_number).toLowerCase().includes(q));
+}
+
+// ---------- render ----------
+async function render(){
+  document.querySelectorAll(".tabs button").forEach(b => b.setAttribute("aria-selected", String(b.dataset.t === st.tab)));
+  ["g","l","k"].forEach(id => $(id)._sync()); syncLayers();
+  $("sort").value = st.sort;
+  st.tab === "collection" ? renderCollection() : renderCatalog();
+}
+function row(p, right){
+  const img = p.image_url ? `<img class="thumb ${p.kind==="sealed"?"sealed":""}" loading="lazy" alt="" src="${esc(p.image_url)}">` : `<div class="thumb"></div>`;
+  return `<li class="item" data-id="${p.id}">${img}<div class="meta"><div class="name">${esc(p.name)}</div>
+    <div class="small muted">${p.language==="JP"?'<span class="tag">JP</span>':""}${p.kind==="sealed"?'<span class="tag">Sealed</span>':""}${esc(GNAME[p.game_id]||p.game_id)} · ${esc(p.sets?.name||"")}${p.card_number?" · "+esc(p.card_number):""}${p.variant?" · "+esc(p.variant):""}</div></div>
+    <div class="right">${right}</div></li>`;
+}
+function renderCollection(){
+  const rows = sortRows(st.col.filter(c => matchP(c.products)), c => c.products, c => c);
+  const items = rows.reduce((n,c) => n + c.quantity, 0);
+  $("sum").innerHTML = `<span class="muted">${rows.length.toLocaleString()} lines · ${items.toLocaleString()} items</span><span class="small muted">Values appear once eBay sold data is connected</span>`;
+  const slice = rows.slice(st.page*PAGE, (st.page+1)*PAGE);
+  $("list").innerHTML = slice.length ? slice.map(c => row(c.products, `<b>×${c.quantity}</b>${esc(c.condition)}${c.grade?" · "+esc(c.grade):""}`)).join("")
+    : `<li class="empty">${st.col.length ? "Nothing matches these filters." : "No collection items found for this account yet."}</li>`;
+  pager(rows.length);
+  bindRows(id => st.col.filter(c => c.products?.id === id));
+}
+async function renderCatalog(){
+  let q = sb.from("catalog_v").select("*", { count:"estimated" });
+  if (st.game !== "all") q = q.eq("game_id", st.game);
+  if (st.lang !== "all") q = q.eq("language", st.lang);
+  if (st.kind !== "all") q = q.eq("kind", st.kind);
+  if (st.set) q = q.eq("set_id", +st.set);
+  else if (st.series) q = q.eq("series_id", +st.series);
+  if (st.q) { const t = st.q.replace(/[,()%*]/g," "); q = q.or(`name.ilike.%${t}%,card_number.ilike.%${t}%`); }
+  const order = { "name":[["name",true]], "-name":[["name",false]], "set":[["set_name",true],["card_number",true]],
+    "newest":[["release_date",false],["name",true]], "oldest":[["release_date",true],["name",true]],
+    "added":[["created_at",false]], "qty":[["name",true]] }[st.sort];
+  order.forEach(([c,a]) => q = q.order(c, { ascending:a, nullsFirst:false }));
+  q = q.range(st.page*PAGE, (st.page+1)*PAGE - 1);
+  $("list").innerHTML = `<li class="empty">Loading…</li>`;
+  const res = await q; const error = res.error, count = res.count;
+  const data = (res.data||[]).map(v => ({ ...v, sets:{ name:v.set_name, release_date:v.release_date, series_id:v.series_id, series:{ name:v.series_name } } }));
+  if (error) { $("list").innerHTML = `<li class="empty">Couldn't load: ${esc(error.message)}</li>`; return; }
+  const owned = new Map(); st.col.forEach(c => owned.set(c.products?.id, (owned.get(c.products?.id)||0) + c.quantity));
+  $("sum").innerHTML = `<span class="muted">${(count||0).toLocaleString()} products in catalog</span><span class="small muted">More sets are added automatically</span>`;
+  $("list").innerHTML = data.length ? data.map(p => row(p, owned.get(p.id) ? `<b>×${owned.get(p.id)}</b>owned` : "")).join("") : `<li class="empty">Nothing matches these filters.</li>`;
+  pager(count||0);
+  bindRows(id => st.col.filter(c => c.products?.id === id), data);
+}
+function pager(total){
+  const pages = Math.max(1, Math.ceil(total / PAGE));
+  $("pager").innerHTML = `<button class="btn" id="prev" ${st.page===0?"disabled":""}>Previous</button><span class="small muted">Page ${st.page+1} of ${pages}</span><button class="btn" id="next" ${st.page>=pages-1?"disabled":""}>Next</button>`;
+  $("prev").onclick = () => { st.page--; render(); scrollTo(0,0); };
+  $("next").onclick = () => { st.page++; render(); scrollTo(0,0); };
+}
+function bindRows(ownedFor, list){
+  document.querySelectorAll(".item[data-id]").forEach(li => li.onclick = () => {
+    const id = +li.dataset.id;
+    const p = (list || []).find(x => x.id === id) || st.col.find(c => c.products?.id === id)?.products;
+    openSheet(p, ownedFor(id));
+  });
+}
+function openSheet(p, owned){
+  if (!p) return;
+  const lines = owned.map(c => `${c.quantity} × ${esc(c.condition)}${c.grade?" "+esc(c.grade):""}${c.date_added?` · added ${esc(c.date_added)}`:""}`).join("<br>");
+  $("sheet").innerHTML = `<button class="close" id="x" aria-label="Close">×</button>
+    ${p.image_url ? `<img alt="${esc(p.name)}" src="${esc(p.image_url)}">` : ""}
+    <h2>${esc(p.name)}</h2>
+    <div class="muted small">${esc(GNAME[p.game_id]||"")} · ${esc(p.sets?.series?.name ? p.sets.series.name + " › " : "")}${esc(p.sets?.name||"")}${p.card_number?" · "+esc(p.card_number):""} · ${p.language==="JP"?"Japanese":"English"}${p.rarity?" · "+esc(p.rarity):""}${p.variant?" · "+esc(p.variant):""}</div>
+    ${owned.length ? `<p><b>In your collection</b><br>${lines}</p>` : ""}
+    <div class="note">eBay sold price, the last 3 sold listings and region comparison will show here once eBay sold data is connected.</div>`;
+  $("x").onclick = closeSheet; $("scrim").classList.add("open"); $("sheet").classList.add("open");
+}
+function closeSheet(){ $("scrim").classList.remove("open"); $("sheet").classList.remove("open"); }
+$("scrim").onclick = closeSheet; document.addEventListener("keydown", e => { if (e.key === "Escape") closeSheet(); });
+init();
+</script>
+</body>
+</html>
