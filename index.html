@@ -85,12 +85,49 @@ select{background:var(--panel);border:1px solid var(--line);border-radius:10px;p
 .box{border:1px solid var(--line);border-radius:12px;padding:12px;margin-top:14px;background:var(--tile)}
 .box h3{margin:0 0 6px;font-size:14px}
 .close{float:right;border:0;background:var(--tile);border-radius:999px;width:34px;height:34px;cursor:pointer;font-size:18px}
+
+.ctl{display:flex;align-items:center;gap:4px;margin-top:6px}
+.q{width:28px;height:28px;border-radius:8px;border:1px solid var(--line);background:var(--panel);font-weight:800;cursor:pointer;line-height:1}
+.qn{min-width:22px;text-align:center;font-weight:800;font-size:13px}
+.cartbtn{margin-left:auto;height:28px;padding:0 9px;border-radius:8px;border:1px solid var(--amber);background:transparent;color:var(--amber);font-weight:800;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:4px}
+.cartbtn svg{width:14px;height:14px}
+.price .v.ok{color:var(--ink)}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--tile-hi);border:1px solid var(--line);padding:10px 16px;border-radius:12px;z-index:40;font-weight:700;display:none;max-width:90vw}
+.toast.show{display:block}
+.carts-top{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:14px 0}
+.carts-top select{flex:1 1 220px}
+.sides{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:760px){.sides{grid-template-columns:1fr}}
+.side{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:12px}
+.side h3{margin:0 0 4px;font-family:"Sora",sans-serif;font-size:16px;display:flex;justify-content:space-between}
+.side.buy h3 span{color:var(--jp)}.side.sell h3 span{color:var(--good)}
+.line{display:grid;grid-template-columns:44px 1fr auto;gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}
+.line img,.line .ph2{width:44px;height:60px;object-fit:contain;border-radius:4px;background:var(--tile)}
+.line .nm{font-weight:700;font-size:13.5px;line-height:1.2}
+.line .sub{font-size:12px;color:var(--muted)}
+.line .tools2{display:flex;align-items:center;gap:4px;margin-top:5px;flex-wrap:wrap}
+.pricein{width:96px;background:var(--tile);border:1px solid var(--line);border-radius:8px;padding:5px 7px;font-size:13px}
+.x{border:0;background:none;color:var(--muted);font-size:18px;cursor:pointer;float:right}
+.lt{text-align:right;font-weight:800;font-family:"Sora",sans-serif;font-size:14px}
+.tot{border-top:1px solid var(--line);margin-top:6px;padding-top:8px;display:grid;grid-template-columns:1fr auto;gap:6px 10px;font-size:13.5px;align-items:center}
+.tot b{font-family:"Sora",sans-serif;text-align:right}
+.disc{display:flex;gap:4px;align-items:center}
+.disc input{width:70px;background:var(--tile);border:1px solid var(--line);border-radius:8px;padding:5px 7px}
+.mode{border:1px solid var(--line);background:var(--tile);border-radius:8px;padding:5px 8px;font-weight:800;cursor:pointer}
+.mode[aria-pressed="true"]{background:var(--amber);color:var(--amber-ink);border-color:var(--amber)}
+.net{margin-top:12px;background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:14px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.net .big{font-family:"Sora",sans-serif;font-size:24px;font-weight:700}
+.warn{color:#FF8A7A;font-size:12.5px}
+.sidepick{display:flex;gap:6px;flex-wrap:wrap}.sidepick .chip{flex:1;text-align:center}
+.field{display:grid;gap:4px;margin-top:12px}.field label{font-size:12px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.05em}
+.sheet h2{margin-top:0}
 </style>
 </head>
 <body>
 <div class="wrap" id="app"></div>
 <div class="scrim" id="scrim"></div>
 <div class="sheet" id="sheet" role="dialog" aria-modal="true"></div>
+<div class="toast" id="toast" role="status"></div>
 <script>
 // Publishable key is safe in browser code; data is protected by row-level security.
 const SUPABASE_URL = "https://nkjxyelfekgfjlfxkkvk.supabase.co";
@@ -102,10 +139,17 @@ const GNAME = Object.fromEntries(GAMES);
 const COND = {NM:"Near Mint",LP:"Lightly Played",MP:"Moderately Played",HP:"Heavily Played",DMG:"Damaged"};
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const $ = id => document.getElementById(id);
+const AUD = new Intl.NumberFormat("en-AU", { style:"currency", currency:"AUD" });
+const money = v => v == null || isNaN(v) ? "—" : AUD.format(v);
 const LOGO = '<svg viewBox="0 0 32 32" aria-hidden="true"><rect x="4" y="3" width="18" height="25" rx="3" fill="#27313B"/><rect x="10" y="5" width="18" height="25" rx="3" fill="#FFB547"/><path d="M14 13h10M14 17h10M14 21h6" stroke="#1B1406" stroke-width="2.2" stroke-linecap="round"/></svg>';
+const CART_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4h2l2.4 11.2a2 2 0 0 0 2 1.6h7.7a2 2 0 0 0 2-1.5L21 8H6"/><circle cx="10" cy="20" r="1.3"/><circle cx="17" cy="20" r="1.3"/></svg>';
 const st = { tab:"collection", game:"all", lang:"all", kind:"all", seriesId:"", setId:"", q:"", sort:"name", shown:48,
-             sets:[], seriesList:[], col:[], cat:[], catCount:0, drawer:false, setById:new Map() };
+             sets:[], seriesList:[], col:[], cat:[], catCount:0, drawer:false, setById:new Map(), prices:new Map(),
+             carts:[], cartId:null, cartItems:[] };
 const STEP = 48;
+try { st.cartId = +localStorage.getItem("activeCart") || null; } catch (e) {}
+
+function toast(msg){ const t = $("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), 2600); }
 
 // ---------- auth ----------
 async function init(){
@@ -137,16 +181,16 @@ async function boot(){
   if (location.hash) history.replaceState(null, "", location.pathname);
   $("app").innerHTML = '<header>'
     + '<div class="bar"><div class="logo">' + LOGO + 'Sold Ledger</div><button class="iconbtn" id="out">Sign out</button></div>'
-    + '<div class="seg" role="tablist"><button role="tab" data-t="collection">My collection</button><button role="tab" data-t="catalog">Catalog</button></div>'
-    + '<div class="tools"><input class="search" id="q" type="search" placeholder="Search name or number" enterkeyhint="search">'
+    + '<div class="seg" role="tablist"><button role="tab" data-t="collection">My collection</button><button role="tab" data-t="catalog">Catalog</button><button role="tab" data-t="carts">Carts<span id="cartcount"></span></button></div>'
+    + '<div id="browse"><div class="tools"><input class="search" id="q" type="search" placeholder="Search name or number" enterkeyhint="search">'
     + '<button class="iconbtn" id="ftoggle" aria-expanded="false">Filters<span id="fcount"></span></button>'
     + '<select id="sort" aria-label="Sort by"><option value="name">Name A–Z</option><option value="-name">Name Z–A</option>'
-    + '<option value="newest">Newest set</option><option value="oldest">Oldest set</option><option value="set">Set &amp; number</option>'
+    + '<option value="value">Highest value</option><option value="newest">Newest set</option><option value="oldest">Oldest set</option><option value="set">Set &amp; number</option>'
     + '<option value="added">Recently added</option><option value="qty">Most copies</option></select></div>'
     + '<div class="drawer" id="drawer"><div class="row" id="g"><span>Game</span></div><div class="row" id="l"><span>Language</span></div>'
     + '<div class="row" id="k"><span>Type</span></div><div class="row"><span>Series</span><select id="ser"></select></div>'
-    + '<div class="row"><span>Set</span><select id="set"></select></div><div class="row"><span></span><button class="chip" id="reset">Clear filters</button></div></div>'
-    + '</header><div class="summary" id="sum"></div><div class="grid" id="grid"></div><div id="more"></div>';
+    + '<div class="row"><span>Set</span><select id="set"></select></div><div class="row"><span></span><button class="chip" id="reset">Clear filters</button></div></div></div>'
+    + '</header><div class="summary" id="sum"></div><div class="grid" id="grid"></div><div id="more"></div><div id="cartview"></div>';
   $("out").onclick = () => sb.auth.signOut();
   document.querySelectorAll(".seg button").forEach(b => b.onclick = () => { st.tab = b.dataset.t; st.shown = STEP; render(true); });
   $("ftoggle").onclick = () => { st.drawer = !st.drawer; $("drawer").classList.toggle("open", st.drawer); $("ftoggle").setAttribute("aria-expanded", st.drawer); };
@@ -159,14 +203,19 @@ async function boot(){
   $("sort").onchange = e => { st.sort = e.target.value; st.shown = STEP; render(true); };
   $("reset").onclick = () => { Object.assign(st, { game:"all", lang:"all", kind:"all", seriesId:"", setId:"", shown:STEP }); render(true); };
   $("grid").innerHTML = '<div class="empty">Loading your collection…</div>';
-  [st.sets, st.seriesList] = await Promise.all([fetchAll("sets", "id,name,game_id,series_id,release_date,language"), fetchAll("series", "id,name,game_id,sort_order")]);
+  const [sets, series, prices] = await Promise.all([
+    fetchAll("sets", "id,name,game_id,series_id,release_date,language", "id"),
+    fetchAll("series", "id,name,game_id,sort_order", "id"),
+    fetchAll("price_v", "product_id,condition,grade,median,sales,last_sold", "product_id")]);
+  st.sets = sets; st.seriesList = series;
   st.setById = new Map(st.sets.map(s => [s.id, s]));
-  await loadCollection();
+  st.prices = new Map(prices.map(r => [r.product_id + "|" + r.condition + "|" + (r.grade || ""), r]));
+  await Promise.all([loadCollection(), loadCarts()]);
   render(true);
 }
-async function fetchAll(table, cols){
+async function fetchAll(table, cols, orderCol){
   const out = []; let from = 0;
-  while (from < 20000) { const { data, error } = await sb.from(table).select(cols).order("id").range(from, from + 999);
+  while (from < 200000) { const { data, error } = await sb.from(table).select(cols).order(orderCol).range(from, from + 999);
     if (error || !data || !data.length) break; out.push(...data); if (data.length < 1000) break; from += 1000; }
   return out;
 }
@@ -176,7 +225,6 @@ function chips(id, opts, get, set){
     b.onclick = () => { set(v); st.shown = STEP; render(true); }; box.appendChild(b); });
   box._sync = () => box.querySelectorAll(".chip").forEach(b => b.setAttribute("aria-pressed", String(get() === b.dataset.v)));
 }
-// Sets visible under the current game + language; series only if they contain a visible set.
 function visibleSets(){ return st.sets.filter(s => (st.game === "all" || s.game_id === st.game) && (st.lang === "all" || s.language === st.lang)); }
 function syncLayers(){
   const vis = visibleSets();
@@ -195,14 +243,26 @@ function syncLayers(){
 
 // ---------- data ----------
 const PCOLS = "id,name,card_number,variant,language,kind,image_url,game_id,set_id,rarity";
+const LINE_COLS = "id,quantity,condition,grade,date_added,cost_paid,products(" + PCOLS + ")";
 async function loadCollection(){
   st.col = []; let from = 0;
   while (true) {
-    const { data, error } = await sb.from("collection_items").select("id,quantity,condition,grade,date_added,cost_paid,products(" + PCOLS + ")").range(from, from + 999);
+    const { data, error } = await sb.from("collection_items").select(LINE_COLS).order("id").range(from, from + 999);
     if (error || !data || !data.length) break;
     st.col.push(...data); if (data.length < 1000) break; from += 1000;
   }
 }
+async function refreshProductLines(pid){
+  const { data } = await sb.from("collection_items").select(LINE_COLS).eq("product_id", pid);
+  st.col = st.col.filter(c => !(c.products && c.products.id === pid)).concat(data || []);
+}
+// eBay-only pricing: exact condition + grade; sealed products fall back to the "Sealed" price.
+function priceOf(p, cond, grade){
+  if (!p) return null;
+  const r = st.prices.get(p.id + "|" + (cond || "NM") + "|" + (grade || "")) || (p.kind === "sealed" ? st.prices.get(p.id + "|Sealed|") : null);
+  return r ? +r.median : null;
+}
+const ownedQty = (pid, cond, grade) => st.col.filter(c => c.products && c.products.id === pid && (cond == null || (c.condition === cond && (c.grade || "") === (grade || "")))).reduce((n, c) => n + c.quantity, 0);
 const setOf = p => st.setById.get(p.set_id) || {};
 const numKey = n => { const m = String(n || "").match(/(\d+)/); return m ? +m[1] : 99999; };
 function matchP(p){
@@ -214,9 +274,10 @@ function matchP(p){
     && (!q || (p.name + " " + p.card_number).toLowerCase().includes(q));
 }
 function sortCol(rows){
-  const P = c => c.products, d = c => setOf(P(c)).release_date || "";
+  const P = c => c.products, d = c => setOf(P(c)).release_date || "", val = c => (priceOf(P(c), c.condition, c.grade) || 0) * c.quantity;
   const by = {
     "name": (a, b) => P(a).name.localeCompare(P(b).name), "-name": (a, b) => P(b).name.localeCompare(P(a).name),
+    "value": (a, b) => val(b) - val(a) || P(a).name.localeCompare(P(b).name),
     "newest": (a, b) => d(b).localeCompare(d(a)) || P(a).name.localeCompare(P(b).name),
     "oldest": (a, b) => (d(a) || "9").localeCompare(d(b) || "9") || P(a).name.localeCompare(P(b).name),
     "set": (a, b) => (setOf(P(a)).name || "").localeCompare(setOf(P(b)).name || "") || numKey(P(a).card_number) - numKey(P(b).card_number),
@@ -228,28 +289,43 @@ function sortCol(rows){
 // ---------- render ----------
 function render(reset){
   document.querySelectorAll(".seg button").forEach(b => b.setAttribute("aria-selected", String(b.dataset.t === st.tab)));
+  const open = st.carts.filter(c => c.status === "open").length;
+  $("cartcount").innerHTML = open ? ' <span class="badge">' + open + '</span>' : "";
+  const browsing = st.tab !== "carts";
+  $("browse").style.display = browsing ? "" : "none";
+  ["sum","grid","more"].forEach(id => $(id).style.display = browsing ? "" : "none");
+  $("cartview").style.display = browsing ? "none" : "";
+  if (!browsing) return renderCarts();
   ["g","l","k"].forEach(id => $(id)._sync()); syncLayers(); $("sort").value = st.sort;
   st.tab === "collection" ? renderCollection() : renderCatalog(reset);
 }
-function tile(p, c){
+function tile(p, line){
   const s = setOf(p);
+  const cond = line ? line.condition : "NM", grade = line ? (line.grade || "") : "";
+  const qty = line ? line.quantity : ownedQty(p.id, "NM", "");
+  const price = priceOf(p, cond, grade);
   const img = p.image_url ? '<img loading="lazy" alt="" src="' + esc(p.image_url) + '">' : '<div class="ph">' + (p.kind === "sealed" ? "Sealed product" : "Image coming") + '</div>';
   const flags = (p.language === "JP" ? '<span class="flag jp">JP</span>' : "") + (p.kind === "sealed" ? '<span class="flag sealed">SEALED</span>' : "");
   const meta = [p.rarity, p.card_number].filter(Boolean).join(" · ");
-  const cond = c && c.condition ? [COND[c.condition] || c.condition, c.grade, p.variant].filter(Boolean).join(" · ") : (p.variant || "");
-  return '<article class="tile" data-id="' + p.id + '"><div class="art">' + img + '<div class="flags">' + flags + '</div>'
-    + (c ? '<span class="qty">×' + c.quantity + '</span>' : "") + '</div><div class="body"><div class="name">' + esc(p.name) + '</div>'
+  const condTxt = line ? [COND[line.condition] || line.condition, line.grade, p.variant].filter(Boolean).join(" · ") : (p.variant || "");
+  const totalOwned = line ? 0 : ownedQty(p.id);
+  return '<article class="tile" data-id="' + p.id + '" data-cond="' + esc(cond) + '" data-grade="' + esc(grade) + '"><div class="art">' + img + '<div class="flags">' + flags + '</div>'
+    + ((line || totalOwned) ? '<span class="qty">×' + (line ? line.quantity : totalOwned) + '</span>' : "") + '</div><div class="body"><div class="name">' + esc(p.name) + '</div>'
     + '<button class="setlink" data-set="' + p.set_id + '">' + esc(s.name || "") + '</button>'
-    + (meta ? '<div class="meta">' + esc(meta) + '</div>' : "") + (cond ? '<div class="cond">' + esc(cond) + '</div>' : "")
-    + '<div class="price"><span class="v">eBay price pending</span><button class="more" aria-label="Details">⋯</button></div></div></article>';
+    + (meta ? '<div class="meta">' + esc(meta) + '</div>' : "") + (condTxt ? '<div class="cond">' + esc(condTxt) + '</div>' : "")
+    + '<div class="price"><span class="v' + (price != null ? ' ok' : '') + '">' + (price != null ? money(price) : "No sold data yet") + '</span></div>'
+    + '<div class="ctl"><button class="q" data-act="dec" aria-label="Remove one from collection">−</button><span class="qn">' + qty + '</span><button class="q" data-act="inc" aria-label="Add one to collection">+</button>'
+    + '<button class="cartbtn" data-act="cart" aria-label="Add to cart">' + CART_ICON + 'Cart</button></div></div></article>';
 }
 function renderCollection(){
   const rows = sortCol(st.col.filter(c => matchP(c.products)));
-  const items = rows.reduce((n, c) => n + c.quantity, 0);
-  $("sum").innerHTML = '<span><b>' + items.toLocaleString() + '</b> <span class="muted">items · ' + rows.length.toLocaleString() + ' lines</span></span><span class="small muted">Values arrive once eBay sold data is connected</span>';
+  let items = 0, value = 0, priced = 0;
+  rows.forEach(c => { items += c.quantity; const pr = priceOf(c.products, c.condition, c.grade); if (pr != null) { value += pr * c.quantity; priced++; } });
+  $("sum").innerHTML = '<span><b>' + money(value) + '</b> <span class="muted">· ' + items.toLocaleString() + ' items · ' + rows.length.toLocaleString() + ' lines</span></span>'
+    + '<span class="small muted">' + (priced ? priced.toLocaleString() + ' of ' + rows.length.toLocaleString() + ' lines priced from eBay AU sold' : 'Values fill in once eBay sold data is connected') + '</span>';
   $("grid").innerHTML = rows.length ? rows.slice(0, st.shown).map(c => tile(c.products, c)).join("")
     : '<div class="empty">' + (st.col.length ? "Nothing in your collection matches these filters." : "No collection items on this account yet.") + '</div>';
-  moreBtn(rows.length); bind(id => st.col.filter(c => c.products && c.products.id === id));
+  moreBtn(rows.length); bind();
 }
 async function renderCatalog(reset){
   const from = reset ? 0 : st.cat.length, to = st.shown - 1;
@@ -259,48 +335,183 @@ async function renderCatalog(reset){
   if (st.kind !== "all") q = q.eq("kind", st.kind);
   if (st.setId) q = q.eq("set_id", +st.setId); else if (st.seriesId) q = q.eq("series_id", +st.seriesId);
   if (st.q) { const t = st.q.replace(/[,()%*]/g, " "); q = q.or("name.ilike.%" + t + "%,card_number.ilike.%" + t + "%"); }
-  const order = { "name":[["name",true]], "-name":[["name",false]], "set":[["set_name",true],["card_number",true]],
+  const order = { "name":[["name",true]], "-name":[["name",false]], "value":[["name",true]], "set":[["set_name",true],["card_number",true]],
     "newest":[["release_date",false],["name",true]], "oldest":[["release_date",true],["name",true]], "added":[["created_at",false]], "qty":[["name",true]] }[st.sort];
   order.forEach(([c, a]) => q = q.order(c, { ascending:a, nullsFirst:false }));
   if (reset) { st.cat = []; $("grid").innerHTML = '<div class="empty">Loading catalog…</div>'; }
   const res = await q.range(from, to);
   if (res.error) { $("grid").innerHTML = '<div class="empty">Couldn\'t load: ' + esc(res.error.message) + '</div>'; return; }
   st.cat = reset ? (res.data || []) : st.cat.concat(res.data || []); st.catCount = res.count || 0;
-  const owned = new Map(); st.col.forEach(c => c.products && owned.set(c.products.id, (owned.get(c.products.id) || 0) + c.quantity));
   $("sum").innerHTML = '<span><b>' + st.catCount.toLocaleString() + '</b> <span class="muted">products</span></span><span class="small muted">New sets and cards are added automatically</span>';
-  $("grid").innerHTML = st.cat.length ? st.cat.map(p => tile(p, owned.get(p.id) ? { quantity: owned.get(p.id) } : null)).join("")
+  $("grid").innerHTML = st.cat.length ? st.cat.map(p => tile(p, null)).join("")
     : '<div class="empty">' + (st.setId ? "This set's cards are still being added by the automatic sync. Check back soon." : "Nothing matches these filters.") + '</div>';
-  moreBtn(st.catCount); bind(id => st.col.filter(c => c.products && c.products.id === id), st.cat);
+  moreBtn(st.catCount); bind();
 }
 function moreBtn(total){
   $("more").innerHTML = st.shown < total ? '<button class="loadmore" id="lm">Show more (' + (total - st.shown).toLocaleString() + ' left)</button>' : "";
   if ($("lm")) $("lm").onclick = () => { st.shown += STEP; st.tab === "collection" ? renderCollection() : renderCatalog(false); };
 }
-function bind(ownedFor, list){
-  document.querySelectorAll(".tile").forEach(el => el.onclick = e => {
-    const sl = e.target.closest(".setlink");
+const findP = id => { const hit = st.col.find(c => c.products && c.products.id === id); return (hit && hit.products) || st.cat.find(x => x.id === id); };
+function bind(){
+  document.querySelectorAll(".tile").forEach(el => el.onclick = async e => {
+    const id = +el.dataset.id, cond = el.dataset.cond, grade = el.dataset.grade, p = findP(id);
+    const sl = e.target.closest(".setlink"), act = e.target.closest("[data-act]");
     if (sl) { e.stopPropagation(); const s = st.setById.get(+sl.dataset.set);
       if (s) { st.game = s.game_id; st.lang = "all"; st.seriesId = ""; st.setId = String(s.id); st.shown = STEP; render(true); scrollTo(0, 0); } return; }
-    const id = +el.dataset.id;
-    const hit = st.col.find(c => c.products && c.products.id === id);
-    const p = (list || []).find(x => x.id === id) || (hit && hit.products);
-    openSheet(p, ownedFor(id));
+    if (act) { e.stopPropagation();
+      if (act.dataset.act === "cart") return openAddToCart(p, cond, grade);
+      return adjust(p, cond, grade, act.dataset.act === "inc" ? 1 : -1);
+    }
+    openSheet(p);
   });
 }
-function openSheet(p, owned){
+async function adjust(p, cond, grade, delta){
+  if (!p) return;
+  const have = ownedQty(p.id, cond, grade);
+  if (delta < 0 && have <= 0) return toast("None of this in your collection (" + (COND[cond] || cond) + ")");
+  if (delta < 0 && have === 1 && !confirm("Remove your last copy of " + p.name + " (" + (COND[cond] || cond) + ") from your collection?")) return;
+  const { error } = await sb.rpc("adjust_collection", { p_product: p.id, p_condition: cond, p_grade: grade || "", p_delta: delta });
+  if (error) return toast(error.message);
+  await refreshProductLines(p.id);
+  toast((delta > 0 ? "Added 1 × " : "Removed 1 × ") + p.name);
+  st.tab === "collection" ? renderCollection() : renderCatalog(false);
+}
+function openSheet(p){
   if (!p) return;
   const s = setOf(p), ser = st.seriesList.find(x => x.id === s.series_id);
+  const owned = st.col.filter(c => c.products && c.products.id === p.id);
   const rows = [["Game", GNAME[p.game_id]], ["Series", ser && ser.name], ["Set", s.name], ["Number", p.card_number], ["Rarity", p.rarity],
     ["Language", p.language === "JP" ? "Japanese" : "English"], ["Type", p.kind === "sealed" ? "Sealed product" : "Single card"], ["Variant", p.variant]].filter(r => r[1]);
-  const lines = owned.map(c => c.quantity + " × " + esc(COND[c.condition] || c.condition) + (c.grade ? " · " + esc(c.grade) : "") + (c.date_added ? ' <span class="muted">· added ' + esc(c.date_added) + '</span>' : "")).join("<br>");
+  const lines = owned.map(c => { const pr = priceOf(p, c.condition, c.grade);
+    return c.quantity + " × " + esc(COND[c.condition] || c.condition) + (c.grade ? " · " + esc(c.grade) : "") + " — " + (pr != null ? money(pr) + " each" : "no sold data yet"); }).join("<br>");
   $("sheet").innerHTML = '<button class="close" id="x" aria-label="Close">×</button><div class="hero">'
     + (p.image_url ? '<img alt="' + esc(p.name) + '" src="' + esc(p.image_url) + '">' : "")
-    + '<div style="flex:1;min-width:200px"><h2>' + esc(p.name) + '</h2><div class="kv">' + rows.map(r => '<span>' + r[0] + '</span><span>' + esc(r[1]) + '</span>').join("") + '</div></div></div>'
+    + '<div style="flex:1;min-width:200px"><h2>' + esc(p.name) + '</h2><div class="kv">' + rows.map(r => '<span>' + r[0] + '</span><span>' + esc(r[1]) + '</span>').join("") + '</div>'
+    + '<button class="btn" id="sheetcart" style="margin-top:12px">Add to cart</button></div></div>'
     + (owned.length ? '<div class="box"><h3>In your collection</h3>' + lines + '</div>' : "")
-    + '<div class="box"><h3>eBay sold prices</h3><span class="muted small">The median sold price, the last 3 sold listings (tap to open on eBay) and region comparison will appear here once eBay is connected.</span></div>';
-  $("x").onclick = closeSheet; $("scrim").classList.add("open"); $("sheet").classList.add("open");
+    + '<div class="box"><h3>eBay sold prices</h3><span class="muted small">Median of recent eBay AU sold listings, plus the last 3 sales (tap to open on eBay), will show here once eBay is connected.</span></div>';
+  $("x").onclick = closeSheet; $("sheetcart").onclick = () => openAddToCart(p, owned[0] ? owned[0].condition : "NM", owned[0] ? owned[0].grade : "");
+  $("scrim").classList.add("open"); $("sheet").classList.add("open");
 }
 function closeSheet(){ $("scrim").classList.remove("open"); $("sheet").classList.remove("open"); }
+
+// ---------- carts ----------
+async function loadCarts(){
+  const { data } = await sb.from("carts").select("*").order("created_at", { ascending:false });
+  st.carts = data || [];
+  if (!st.carts.some(c => c.id === st.cartId)) st.cartId = (st.carts.find(c => c.status === "open") || st.carts[0] || {}).id || null;
+  await loadCartItems();
+}
+async function loadCartItems(){
+  if (!st.cartId) { st.cartItems = []; return; }
+  const { data } = await sb.from("cart_items").select("*,products(" + PCOLS + ")").eq("cart_id", st.cartId).order("id");
+  st.cartItems = data || [];
+  try { localStorage.setItem("activeCart", st.cartId); } catch (e) {}
+}
+async function newCart(){
+  const name = prompt("Name this cart", "Trade " + new Date().toLocaleDateString("en-AU"));
+  if (!name) return null;
+  const { data, error } = await sb.from("carts").insert({ name }).select().single();
+  if (error) { toast(error.message); return null; }
+  st.carts.unshift(data); st.cartId = data.id; await loadCartItems(); return data;
+}
+function openAddToCart(p, cond, grade){
+  if (!p) return;
+  const open = st.carts.filter(c => c.status === "open");
+  const conds = ["NM","LP","MP","HP","DMG"].concat(cond && !COND[cond] ? [cond] : []);
+  $("sheet").innerHTML = '<button class="close" id="x" aria-label="Close">×</button><h2>Add to cart</h2><div class="muted small">' + esc(p.name) + ' · ' + esc(setOf(p).name || "") + '</div>'
+    + '<div class="field"><label>Cart</label><select id="ac-cart">' + open.map(c => '<option value="' + c.id + '"' + (c.id === st.cartId ? " selected" : "") + '>' + esc(c.name) + '</option>').join("") + '<option value="new">+ New cart…</option></select></div>'
+    + '<div class="field"><label>Side</label><div class="sidepick"><button class="chip" data-side="buy" aria-pressed="true">Buy (adding to collection)</button><button class="chip" data-side="sell" aria-pressed="false">Sell (from collection)</button></div></div>'
+    + '<div class="field"><label>Condition</label><select id="ac-cond">' + conds.map(k => '<option value="' + esc(k) + '"' + (k === cond ? " selected" : "") + '>' + esc(COND[k] || k) + '</option>').join("") + '</select></div>'
+    + '<div class="field"><label>Quantity</label><div class="ctl"><button class="q" id="ac-dec">−</button><span class="qn" id="ac-q">1</span><button class="q" id="ac-inc">+</button><span class="small muted" id="ac-own" style="margin-left:8px"></span></div></div>'
+    + '<p class="warn" id="ac-warn"></p><button class="btn" id="ac-add">Add to cart</button>';
+  let side = "buy", qty = 1;
+  const upd = () => { const c = $("ac-cond").value, have = ownedQty(p.id, c, grade);
+    $("ac-q").textContent = qty; $("ac-own").textContent = "You own " + have + " in this condition";
+    $("ac-warn").textContent = side === "sell" && qty > have ? "You'll need " + qty + " in your collection to complete this sale." : ""; };
+  document.querySelectorAll(".sidepick .chip").forEach(b => b.onclick = () => { side = b.dataset.side; document.querySelectorAll(".sidepick .chip").forEach(x => x.setAttribute("aria-pressed", String(x === b))); upd(); });
+  $("ac-dec").onclick = () => { qty = Math.max(1, qty - 1); upd(); }; $("ac-inc").onclick = () => { qty++; upd(); }; $("ac-cond").onchange = upd;
+  $("ac-add").onclick = async () => {
+    let cartId = $("ac-cart").value;
+    if (cartId === "new") { const c = await newCart(); if (!c) return; cartId = c.id; } else cartId = +cartId;
+    if (st.cartId !== cartId) { st.cartId = cartId; await loadCartItems(); }
+    const c = $("ac-cond").value;
+    const ex = st.cartItems.find(i => i.product_id === p.id && i.side === side && i.condition === c && (i.grade || "") === (grade || ""));
+    const res = ex ? await sb.from("cart_items").update({ quantity: ex.quantity + qty }).eq("id", ex.id)
+                   : await sb.from("cart_items").insert({ cart_id: cartId, product_id: p.id, side, condition: c, grade: grade || "", quantity: qty });
+    if (res.error) return toast(res.error.message);
+    await loadCartItems(); closeSheet(); render(false);
+    toast("Added to " + (side === "buy" ? "Buy" : "Sell") + " in " + (st.carts.find(x => x.id === cartId) || {}).name);
+  };
+  upd(); $("x").onclick = closeSheet; $("scrim").classList.add("open"); $("sheet").classList.add("open");
+}
+const unitOf = i => i.unit_price != null ? +i.unit_price : priceOf(i.products, i.condition, i.grade);
+function sideTotals(side, cart){
+  const items = st.cartItems.filter(i => i.side === side);
+  let sub = 0, unpriced = 0;
+  items.forEach(i => { const u = unitOf(i); if (u == null) unpriced++; else sub += u * i.quantity; });
+  const d = +cart[side + "_discount"] || 0, mode = cart[side + "_discount_mode"];
+  const total = mode === "%" ? sub * (1 - Math.min(d, 100) / 100) : Math.max(0, sub - d);
+  return { items, sub, total, unpriced, disc: sub - total };
+}
+function renderCarts(){
+  const v = $("cartview");
+  if (!st.carts.length) { v.innerHTML = '<div class="empty" style="margin-top:14px">No carts yet. Use the <b>Cart</b> button on any card, or start one here.<br><br><button class="btn" id="nc">New cart</button></div>';
+    $("nc").onclick = async () => { await newCart(); render(false); }; return; }
+  const cart = st.carts.find(c => c.id === st.cartId) || st.carts[0];
+  const done = cart.status === "completed";
+  const B = sideTotals("buy", cart), S = sideTotals("sell", cart), net = S.total - B.total;
+  const lineHTML = i => { const p = i.products || {}, u = priceOf(p, i.condition, i.grade), eff = unitOf(i);
+    return '<div class="line" data-item="' + i.id + '">' + (p.image_url ? '<img alt="" src="' + esc(p.image_url) + '">' : '<div class="ph2"></div>')
+      + '<div><div class="nm">' + esc(p.name) + '</div><div class="sub">' + esc(setOf(p).name || "") + (p.card_number ? " · " + esc(p.card_number) : "") + ' · ' + esc(COND[i.condition] || i.condition) + (p.language === "JP" ? " · JP" : "") + '</div>'
+      + '<div class="tools2">' + (done ? '<span class="small muted">× ' + i.quantity + '</span>' : '<button class="q" data-li="dec">−</button><span class="qn">' + i.quantity + '</span><button class="q" data-li="inc">+</button>')
+      + '<input class="pricein" data-li="price" inputmode="decimal" ' + (done ? "disabled " : "") + 'placeholder="' + (u != null ? "eBay " + u.toFixed(2) : "Price") + '" value="' + (i.unit_price != null ? (+i.unit_price).toFixed(2) : "") + '" aria-label="Unit price (AUD)"></div></div>'
+      + '<div><div class="lt">' + (eff != null ? money(eff * i.quantity) : '<span class="warn">No price</span>') + '</div>' + (done ? "" : '<button class="x" data-li="rm" aria-label="Remove from cart">×</button>') + '</div></div>'; };
+  const sideHTML = (side, T, label, hint) => '<div class="side ' + side + '"><h3>' + label + ' <span>' + money(T.total) + '</span></h3><div class="small muted">' + hint + '</div>'
+    + (T.items.length ? T.items.map(lineHTML).join("") : '<div class="small muted" style="padding:12px 0">Nothing here yet.</div>')
+    + '<div class="tot"><span>Subtotal (' + T.items.reduce((n, i) => n + i.quantity, 0) + ' items)</span><b>' + money(T.sub) + '</b>'
+    + '<span class="disc">Discount <input data-disc="' + side + '" inputmode="decimal" ' + (done ? "disabled " : "") + 'value="' + (+cart[side + "_discount"] || "") + '" placeholder="0">'
+    + '<button class="mode" data-mode="' + side + '" data-m="%" aria-pressed="' + (cart[side + "_discount_mode"] === "%") + '"' + (done ? " disabled" : "") + '>%</button><button class="mode" data-mode="' + side + '" data-m="$" aria-pressed="' + (cart[side + "_discount_mode"] === "$") + '"' + (done ? " disabled" : "") + '>$</button></span><b>−' + money(T.disc) + '</b>'
+    + '<span>Total</span><b>' + money(T.total) + '</b></div>' + (T.unpriced ? '<div class="warn">' + T.unpriced + ' line(s) have no price yet — enter one to include them.</div>' : "") + '</div>';
+  v.innerHTML = '<div class="carts-top"><select id="cartsel" aria-label="Choose cart">' + st.carts.map(c => '<option value="' + c.id + '"' + (c.id === cart.id ? " selected" : "") + '>' + (c.status === "completed" ? "✓ " : "") + esc(c.name) + '</option>').join("") + '</select>'
+    + '<button class="iconbtn" id="cnew">New</button>' + (done ? "" : '<button class="iconbtn" id="cren">Rename</button>') + '<button class="iconbtn" id="cdel">Delete</button></div>'
+    + (done ? '<p class="small muted">Completed ' + new Date(cart.completed_at).toLocaleString("en-AU") + '. Your collection was updated.</p>' : "")
+    + '<div class="sides">' + sideHTML("buy", B, "Buy", "Items you're getting — added to your collection on Proceed.") + sideHTML("sell", S, "Sell", "Items you're giving — removed from your collection on Proceed.") + '</div>'
+    + '<div class="net"><div><div class="small muted">Sell ' + money(S.total) + ' − Buy ' + money(B.total) + '</div><div class="big" style="color:' + (net >= 0 ? "var(--good)" : "#FF8A7A") + '">' + (net >= 0 ? "You receive " : "You pay ") + money(Math.abs(net)) + '</div></div>'
+    + (done ? "" : '<button class="btn" id="proceed"' + (B.items.length + S.items.length ? "" : " disabled") + '>Proceed</button>') + '</div>';
+  $("cartsel").onchange = async e => { st.cartId = +e.target.value; await loadCartItems(); renderCarts(); };
+  $("cnew").onclick = async () => { await newCart(); render(false); };
+  if ($("cren")) $("cren").onclick = async () => { const n = prompt("Rename cart", cart.name); if (!n) return; await sb.from("carts").update({ name:n }).eq("id", cart.id); cart.name = n; renderCarts(); };
+  $("cdel").onclick = async () => { if (!confirm("Delete the cart \"" + cart.name + "\"? This only deletes the cart, not anything in your collection.")) return;
+    await sb.from("carts").delete().eq("id", cart.id); st.carts = st.carts.filter(c => c.id !== cart.id); st.cartId = null; await loadCarts(); render(false); };
+  v.querySelectorAll(".line").forEach(el => {
+    const it = st.cartItems.find(i => i.id === +el.dataset.item);
+    el.querySelectorAll("[data-li]").forEach(b => {
+      const a = b.dataset.li;
+      if (a === "price") { b.onchange = async () => { const val = b.value.trim() === "" ? null : Math.max(0, +b.value.replace(/[^0-9.]/g, ""));
+        await sb.from("cart_items").update({ unit_price: val }).eq("id", it.id); it.unit_price = val; renderCarts(); }; return; }
+      b.onclick = async () => {
+        if (a === "rm") { await sb.from("cart_items").delete().eq("id", it.id); st.cartItems = st.cartItems.filter(i => i.id !== it.id); return render(false); }
+        const q = it.quantity + (a === "inc" ? 1 : -1); if (q < 1) return;
+        await sb.from("cart_items").update({ quantity:q }).eq("id", it.id); it.quantity = q; renderCarts();
+      };
+    });
+  });
+  v.querySelectorAll("[data-disc]").forEach(inp => inp.onchange = async () => { const side = inp.dataset.disc, val = Math.max(0, +inp.value.replace(/[^0-9.]/g, "") || 0);
+    await sb.from("carts").update({ [side + "_discount"]: val }).eq("id", cart.id); cart[side + "_discount"] = val; renderCarts(); });
+  v.querySelectorAll("[data-mode]").forEach(b => b.onclick = async () => { const side = b.dataset.mode;
+    await sb.from("carts").update({ [side + "_discount_mode"]: b.dataset.m }).eq("id", cart.id); cart[side + "_discount_mode"] = b.dataset.m; renderCarts(); });
+  if ($("proceed")) $("proceed").onclick = async () => {
+    const short = S.items.filter(i => i.quantity > ownedQty(i.product_id, i.condition, i.grade));
+    if (short.length) return toast("Not enough in your collection for: " + short.map(i => i.products.name).join(", "));
+    if (!confirm("Proceed with \"" + cart.name + "\"?\n\nAdds " + B.items.reduce((n, i) => n + i.quantity, 0) + " item(s) to your collection and removes " + S.items.reduce((n, i) => n + i.quantity, 0) + ".\nNet: " + (net >= 0 ? "you receive " : "you pay ") + money(Math.abs(net)))) return;
+    $("proceed").disabled = true;
+    const { error } = await sb.rpc("complete_cart", { p_cart: cart.id });
+    if (error) { $("proceed").disabled = false; return toast(error.message); }
+    await Promise.all([loadCollection(), loadCarts()]);
+    toast("Done — your collection has been updated"); render(false);
+  };
+}
 $("scrim").onclick = closeSheet; document.addEventListener("keydown", e => { if (e.key === "Escape") closeSheet(); });
 init();
 </script>
