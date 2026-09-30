@@ -76,7 +76,7 @@ const GAMES = [["pokemon","Pokémon"],["one-piece","One Piece"],["dragon-ball","
 const GNAME = Object.fromEntries(GAMES);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const $ = id => document.getElementById(id);
-const st = { tab:"collection", game:"all", lang:"all", kind:"all", series:"", set:"", q:"", sort:"name", page:0, sets:[], series:[], col:[] , loading:false };
+const st = { tab:"collection", game:"all", lang:"all", kind:"all", series:"", set:"", q:"", sort:"name", page:0, sets:[], seriesList:[], col:[] , loading:false };
 const PAGE = 60;
 
 // ---------- auth ----------
@@ -130,7 +130,7 @@ async function boot(){
   const [{ data:sets }, { data:series }] = await Promise.all([
     sb.from("sets").select("id,name,game_id,series_id,release_date").limit(5000),
     sb.from("series").select("id,name,game_id").limit(1000)]);
-  st.sets = sets || []; st.series = series || [];
+  st.sets = sets || []; st.seriesList = series || [];
   await loadCollection();
   render();
 }
@@ -142,7 +142,7 @@ function chips(id, opts, get, set){
 }
 function syncLayers(){
   const inGame = s => st.game === "all" || s.game_id === st.game;
-  const serOpts = st.series.filter(inGame);
+  const serOpts = st.seriesList.filter(inGame);
   $("ser").innerHTML = `<option value="">All series</option>` + serOpts.map(s => `<option value="${s.id}" ${String(s.id)===st.series?"selected":""}>${esc((st.game==="all"?GNAME[s.game_id]+" · ":"") + s.name)}</option>`).join("");
   const setOpts = st.sets.filter(s => inGame(s) && (!st.series || String(s.series_id) === st.series)).sort((a,b) => a.name.localeCompare(b.name));
   $("set").innerHTML = `<option value="">All sets</option>` + setOpts.map(s => `<option value="${s.id}" ${String(s.id)===st.set?"selected":""}>${esc((st.game==="all"?GNAME[s.game_id]+" · ":"") + s.name)}</option>`).join("");
