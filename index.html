@@ -3,63 +3,88 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#101418">
 <title>Sold Ledger</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <style>
-:root{--bg:#EEF1F5;--surface:#fff;--ink:#172033;--muted:#5B6577;--line:#D6DCE5;--accent:#3346C9;--accent-soft:#E3E7FB;--chip:#F5F7FA;
-  box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
-  font-family:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif}
-@media (prefers-color-scheme:dark){:root{--bg:#0F1523;--surface:#182033;--ink:#E7ECF5;--muted:#97A1B5;--line:#2A3450;--accent:#8A9BFF;--accent-soft:#232D4E;--chip:#1E2740}}
+:root{
+  --bg:#101418;--panel:#161B21;--tile:#1A2027;--tile-hi:#202833;--line:#27313B;--ink:#E8EDF2;--muted:#8A96A3;
+  --amber:#FFB547;--amber-ink:#1B1406;--jp:#7FB4FF;--sealed:#C49BFF;--good:#5FD39A;
+  --r:14px;box-sizing:border-box;color-scheme:dark;
+  padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+  font-family:"Manrope",system-ui,-apple-system,"Segoe UI",sans-serif}
 *,*::before,*::after{box-sizing:inherit}
-body{margin:0;background:var(--bg);color:var(--ink);font-size:15px;line-height:1.45}
+html,body{background:var(--bg)}
+body{margin:0;color:var(--ink);font-size:15px;line-height:1.4}
 button,select,input{font:inherit;color:inherit}
-:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.wrap{max-width:900px;margin:0 auto;padding:0 16px 48px}
-header{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding:14px 0 10px;border-bottom:1px solid var(--line)}
-.brand{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
-h1{font-family:"Bricolage Grotesque",sans-serif;font-size:26px;margin:0;letter-spacing:-.02em}
-.link{background:none;border:0;color:var(--accent);cursor:pointer;padding:4px}
-.tabs{display:flex;gap:4px;margin-top:12px;background:var(--chip);border-radius:10px;padding:4px}
-.tabs button{flex:1;border:0;background:transparent;padding:8px;border-radius:7px;font-weight:600;color:var(--muted);cursor:pointer}
-.tabs button[aria-selected="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 0 var(--line)}
-.filters{display:grid;gap:10px;margin:14px 0 8px}
-.group{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
-.group>span{font-size:12.5px;color:var(--muted);min-width:64px}
-.chip{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:5px 11px;font-size:13px;cursor:pointer}
-.chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--surface)}
-select,.search{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:7px 9px;max-width:100%}
-.search{flex:1 1 220px}
-.summary{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin:12px 0 4px;flex-wrap:wrap}
-.summary b{font-family:"Bricolage Grotesque",sans-serif;font-size:28px;letter-spacing:-.02em}
+:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+.wrap{max-width:1180px;margin:0 auto;padding:0 14px 60px}
+header{position:sticky;top:env(safe-area-inset-top,0px);z-index:10;background:linear-gradient(var(--bg) 82%,transparent);padding:12px 0 8px}
+.bar{display:flex;align-items:center;gap:10px}
+.logo{display:flex;align-items:center;gap:9px;font-family:"Sora",sans-serif;font-weight:700;font-size:20px;letter-spacing:-.02em;margin-right:auto}
+.logo svg{width:28px;height:28px}
+.iconbtn{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 11px;cursor:pointer;font-size:14px;font-weight:600}
+.seg{display:flex;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:3px;margin-top:10px}
+.seg button{flex:1;border:0;background:none;padding:9px;border-radius:9px;font-weight:700;color:var(--muted);cursor:pointer}
+.seg button[aria-selected="true"]{background:var(--tile-hi);color:var(--ink)}
+.tools{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.search{flex:1 1 220px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+select{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:9px 10px;max-width:100%}
+.badge{display:inline-block;min-width:18px;padding:0 5px;border-radius:9px;background:var(--amber);color:var(--amber-ink);font-size:11px;font-weight:800;margin-left:4px;text-align:center}
+.drawer{display:none;background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:12px;margin-top:10px;gap:10px}
+.drawer.open{display:grid}
+.row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.row>span{font-size:12px;color:var(--muted);min-width:70px;text-transform:uppercase;letter-spacing:.06em;font-weight:700}
+.chip{border:1px solid var(--line);background:var(--tile);border-radius:999px;padding:6px 12px;font-size:13px;font-weight:600;cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--amber);border-color:var(--amber);color:var(--amber-ink)}
+.summary{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin:14px 2px 10px;flex-wrap:wrap}
+.summary b{font-family:"Sora",sans-serif;font-size:22px}
 .muted{color:var(--muted)}.small{font-size:12.5px}
-ul.list{list-style:none;margin:8px 0 0;padding:0;background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden}
-.item{display:flex;gap:12px;align-items:center;padding:10px 14px;border-top:1px solid var(--line);cursor:pointer}
-.item:first-child{border-top:0}
-.thumb{flex:0 0 auto;width:46px;aspect-ratio:63/88;border-radius:4px;background:var(--chip);object-fit:cover;border:1px solid var(--line)}
-.thumb.sealed{aspect-ratio:1/1;object-fit:contain}
-.meta{flex:1;min-width:0}.name{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.tag{display:inline-block;font-size:11px;padding:1px 6px;border-radius:4px;background:var(--accent-soft);color:var(--accent);margin-right:6px;font-weight:600}
-.right{text-align:right;font-size:12.5px;color:var(--muted);white-space:nowrap}
-.right b{display:block;color:var(--ink);font-family:"Bricolage Grotesque",sans-serif;font-size:17px}
-.pager{display:flex;justify-content:space-between;align-items:center;margin-top:10px}
-.btn{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:7px 12px;cursor:pointer}
-.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--surface);font-weight:600}
-.btn:disabled{opacity:.5;cursor:default}
-.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:22px;margin-top:40px}
-.card input{width:100%;margin:10px 0}
-.empty{padding:28px;text-align:center;color:var(--muted)}
-.scrim{position:fixed;inset:0;background:rgba(10,14,25,.45);display:none;z-index:20}.scrim.open{display:block}
-.sheet{position:fixed;left:0;right:0;bottom:0;max-height:90%;overflow:auto;background:var(--surface);border-radius:16px 16px 0 0;z-index:21;
-  padding:18px 18px calc(18px + env(safe-area-inset-bottom,0px));transform:translateY(105%);transition:transform .2s;max-width:760px;margin:0 auto}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:12px}
+@media (max-width:420px){.grid{grid-template-columns:repeat(2,1fr);gap:9px}}
+.tile{background:var(--tile);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;display:flex;flex-direction:column;cursor:pointer;transition:border-color .15s}
+.tile:hover{border-color:#3A4855}
+.art{aspect-ratio:5/6;background:radial-gradient(120% 90% at 50% 20%,#233040 0%,#141A20 70%);display:flex;align-items:center;justify-content:center;padding:10px;position:relative}
+.art img{max-width:100%;max-height:100%;object-fit:contain;border-radius:6px;filter:drop-shadow(0 6px 14px rgba(0,0,0,.45))}
+.art .ph{width:62%;aspect-ratio:63/88;border-radius:8px;border:1.5px dashed #34424F;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:11px;text-align:center;padding:6px}
+.flags{position:absolute;top:8px;left:8px;display:flex;gap:4px}
+.flag{font-size:10.5px;font-weight:800;padding:2px 6px;border-radius:6px;background:rgba(16,20,24,.85);border:1px solid var(--line)}
+.flag.jp{color:var(--jp)}.flag.sealed{color:var(--sealed)}
+.qty{position:absolute;top:8px;right:8px;font-size:11.5px;font-weight:800;padding:2px 7px;border-radius:7px;background:var(--amber);color:var(--amber-ink)}
+.body{padding:10px 11px 11px;display:flex;flex-direction:column;gap:3px;flex:1}
+.name{font-weight:700;font-size:14px;line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.setlink{background:none;border:0;padding:0;text-align:left;color:var(--muted);font-size:12px;text-decoration:underline;text-decoration-color:#3A4855;text-underline-offset:2px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.meta{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cond{font-size:12px;color:var(--good);font-weight:600}
+.price{margin-top:auto;padding-top:6px;display:flex;justify-content:space-between;align-items:flex-end;gap:6px}
+.price .v{font-family:"Sora",sans-serif;font-size:14px;color:var(--muted)}
+.more{width:28px;height:28px;border-radius:50%;border:1px solid var(--line);background:var(--panel);cursor:pointer;font-weight:800;line-height:1}
+.loadmore{display:block;margin:16px auto 0;padding:11px 22px;border-radius:12px;border:1px solid var(--line);background:var(--panel);font-weight:700;cursor:pointer}
+.empty{grid-column:1/-1;padding:40px 16px;text-align:center;color:var(--muted);background:var(--panel);border:1px dashed var(--line);border-radius:var(--r)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:24px;margin:60px auto 0;max-width:440px}
+.card h1{font-family:"Sora",sans-serif;margin:10px 0 6px}
+.card input{width:100%;margin:14px 0 10px}
+.btn{border:0;border-radius:10px;padding:11px 16px;background:var(--amber);color:var(--amber-ink);font-weight:800;cursor:pointer}
+.btn:disabled{opacity:.5}
+.scrim{position:fixed;inset:0;background:rgba(5,7,9,.6);display:none;z-index:20}.scrim.open{display:block}
+.sheet{position:fixed;left:0;right:0;bottom:0;max-height:92%;overflow:auto;background:var(--panel);border-top:1px solid var(--line);border-radius:18px 18px 0 0;z-index:21;
+  padding:18px 18px calc(22px + env(safe-area-inset-bottom,0px));transform:translateY(105%);transition:transform .22s;max-width:760px;margin:0 auto}
 .sheet.open{transform:none}
-@media (prefers-reduced-motion:reduce){.sheet{transition:none}}
-.sheet img{width:180px;max-width:60%;border-radius:8px;display:block;margin:4px 0 12px}
-.sheet h2{font-family:"Bricolage Grotesque",sans-serif;margin:0 0 4px;font-size:22px}
-.close{float:right;border:0;background:var(--chip);border-radius:999px;width:32px;height:32px;cursor:pointer;font-size:18px}
-.note{border:1px dashed var(--line);border-radius:10px;padding:10px 12px;margin-top:12px;font-size:13.5px;color:var(--muted)}
+@media (prefers-reduced-motion:reduce){.sheet,.tile{transition:none}}
+.sheet .hero{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap}
+.sheet .hero img{width:190px;max-width:48%;border-radius:10px}
+.sheet h2{font-family:"Sora",sans-serif;margin:0 0 6px;font-size:21px;line-height:1.2}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:13.5px;margin-top:8px}
+.kv span:nth-child(odd){color:var(--muted)}
+.box{border:1px solid var(--line);border-radius:12px;padding:12px;margin-top:14px;background:var(--tile)}
+.box h3{margin:0 0 6px;font-size:14px}
+.close{float:right;border:0;background:var(--tile);border-radius:999px;width:34px;height:34px;cursor:pointer;font-size:18px}
 </style>
 </head>
 <body>
@@ -67,35 +92,41 @@ ul.list{list-style:none;margin:8px 0 0;padding:0;background:var(--surface);borde
 <div class="scrim" id="scrim"></div>
 <div class="sheet" id="sheet" role="dialog" aria-modal="true"></div>
 <script>
-// ---- config: the publishable (anon) key is safe in browser code; your data is protected by row-level security ----
+// Publishable key is safe in browser code; data is protected by row-level security.
 const SUPABASE_URL = "https://nkjxyelfekgfjlfxkkvk.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_juI9-HkffckYydt9j7o6TA_Vda592lA";
 
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const GAMES = [["pokemon","Pokémon"],["one-piece","One Piece"],["dragon-ball","Dragon Ball"],["magic","Magic"],["yugioh","Yu-Gi-Oh!"]];
 const GNAME = Object.fromEntries(GAMES);
+const COND = {NM:"Near Mint",LP:"Lightly Played",MP:"Moderately Played",HP:"Heavily Played",DMG:"Damaged"};
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const $ = id => document.getElementById(id);
-const st = { tab:"collection", game:"all", lang:"all", kind:"all", series:"", set:"", q:"", sort:"name", page:0, sets:[], seriesList:[], col:[] , loading:false };
-const PAGE = 60;
+const LOGO = '<svg viewBox="0 0 32 32" aria-hidden="true"><rect x="4" y="3" width="18" height="25" rx="3" fill="#27313B"/><rect x="10" y="5" width="18" height="25" rx="3" fill="#FFB547"/><path d="M14 13h10M14 17h10M14 21h6" stroke="#1B1406" stroke-width="2.2" stroke-linecap="round"/></svg>';
+const st = { tab:"collection", game:"all", lang:"all", kind:"all", seriesId:"", setId:"", q:"", sort:"name", shown:48,
+             sets:[], seriesList:[], col:[], cat:[], catCount:0, drawer:false, setById:new Map() };
+const STEP = 48;
 
 // ---------- auth ----------
 async function init(){
-  if (SUPABASE_ANON_KEY.startsWith("PASTE")) { $("app").innerHTML = `<div class="card"><h1>Almost there</h1><p class="muted">Add the Supabase publishable key to index.html to connect the app.</p></div>`; return; }
+  if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+  if (SUPABASE_ANON_KEY.startsWith("PASTE")) { $("app").innerHTML = '<div class="card">' + LOGO + '<h1>Almost there</h1><p class="muted">Add the Supabase publishable key to index.html.</p></div>'; return; }
   const { data:{ session } } = await sb.auth.getSession();
   sb.auth.onAuthStateChange((_e, s) => { if (s && !window.__booted) boot(); if (!s) loginView(); });
   session ? boot() : loginView();
 }
 function loginView(){
   window.__booted = false;
-  $("app").innerHTML = `<div class="card"><h1>Sold Ledger</h1><p class="muted">Sign in with your email. We'll send you a one-tap link.</p>
-    <input class="search" id="email" type="email" autocomplete="email" placeholder="you@example.com">
-    <button class="btn primary" id="send">Send sign-in link</button><p class="small muted" id="msg"></p></div>`;
+  const err = new URLSearchParams(location.hash.slice(1)).get("error_description");
+  $("app").innerHTML = '<div class="card">' + LOGO + '<h1>Sold Ledger</h1><p class="muted">Your collection, priced by what actually sells. Sign in with a one-tap email link.</p>'
+    + (err ? '<p class="small" style="color:#FF8A7A">' + esc(err) + ' Request a new link below.</p>' : '')
+    + '<input class="search" id="email" type="email" autocomplete="email" placeholder="you@example.com">'
+    + '<button class="btn" id="send">Send sign-in link</button><p class="small muted" id="msg"></p></div>';
   $("send").onclick = async () => {
     const email = $("email").value.trim(); if (!email) return;
     $("send").disabled = true;
     const { error } = await sb.auth.signInWithOtp({ email, options:{ emailRedirectTo: location.origin + location.pathname } });
-    $("msg").textContent = error ? "Couldn't send: " + error.message : "Check your email and tap the link.";
+    $("msg").textContent = error ? "Couldn't send: " + error.message : "Check your email and tap the newest link.";
     $("send").disabled = false;
   };
 }
@@ -103,33 +134,35 @@ function loginView(){
 // ---------- shell ----------
 async function boot(){
   window.__booted = true;
-  $("app").innerHTML = `<header><div class="brand"><h1>Sold Ledger</h1><button class="link" id="out">Sign out</button></div>
-    <div class="tabs" role="tablist"><button role="tab" data-t="collection">Collection</button><button role="tab" data-t="catalog">Catalog</button></div></header>
-    <div class="filters">
-      <div class="group"><input class="search" id="q" type="search" placeholder="Search name or card number"></div>
-      <div class="group" id="g"><span>Game</span></div>
-      <div class="group" id="l"><span>Language</span></div>
-      <div class="group" id="k"><span>Type</span></div>
-      <div class="group"><span>Series</span><select id="ser"></select></div>
-      <div class="group"><span>Set</span><select id="set"></select></div>
-      <div class="group"><span>Sort by</span><select id="sort">
-        <option value="name">Name: A to Z</option><option value="-name">Name: Z to A</option>
-        <option value="set">Set, then card number</option><option value="newest">Newest set first</option><option value="oldest">Oldest set first</option>
-        <option value="added">Recently added</option><option value="qty">Most copies</option></select></div>
-    </div>
-    <div class="summary" id="sum"></div><ul class="list" id="list"></ul><div class="pager" id="pager"></div>`;
+  if (location.hash) history.replaceState(null, "", location.pathname);
+  $("app").innerHTML = '<header>'
+    + '<div class="bar"><div class="logo">' + LOGO + 'Sold Ledger</div><button class="iconbtn" id="out">Sign out</button></div>'
+    + '<div class="seg" role="tablist"><button role="tab" data-t="collection">My collection</button><button role="tab" data-t="catalog">Catalog</button></div>'
+    + '<div class="tools"><input class="search" id="q" type="search" placeholder="Search name or number" enterkeyhint="search">'
+    + '<button class="iconbtn" id="ftoggle" aria-expanded="false">Filters<span id="fcount"></span></button>'
+    + '<select id="sort" aria-label="Sort by"><option value="name">Name A–Z</option><option value="-name">Name Z–A</option>'
+    + '<option value="newest">Newest set</option><option value="oldest">Oldest set</option><option value="set">Set &amp; number</option>'
+    + '<option value="added">Recently added</option><option value="qty">Most copies</option></select></div>'
+    + '<div class="drawer" id="drawer"><div class="row" id="g"><span>Game</span></div><div class="row" id="l"><span>Language</span></div>'
+    + '<div class="row" id="k"><span>Type</span></div><div class="row"><span>Series</span><select id="ser"></select></div>'
+    + '<div class="row"><span>Set</span><select id="set"></select></div><div class="row"><span></span><button class="chip" id="reset">Clear filters</button></div></div>'
+    + '</header><div class="summary" id="sum"></div><div class="grid" id="grid"></div><div id="more"></div>';
   $("out").onclick = () => sb.auth.signOut();
-  document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => { st.tab = b.dataset.t; st.page = 0; render(); });
-  chips("g", [["all","All"],...GAMES], () => st.game, v => { st.game = v; st.series = ""; st.set = ""; });
-  chips("l", [["all","All"],["EN","English"],["JP","Japanese"]], () => st.lang, v => st.lang = v);
+  document.querySelectorAll(".seg button").forEach(b => b.onclick = () => { st.tab = b.dataset.t; st.shown = STEP; render(true); });
+  $("ftoggle").onclick = () => { st.drawer = !st.drawer; $("drawer").classList.toggle("open", st.drawer); $("ftoggle").setAttribute("aria-expanded", st.drawer); };
+  chips("g", [["all","All"], ...GAMES], () => st.game, v => { st.game = v; st.seriesId = ""; st.setId = ""; });
+  chips("l", [["all","All"],["EN","English"],["JP","Japanese"]], () => st.lang, v => { st.lang = v; st.seriesId = ""; st.setId = ""; });
   chips("k", [["all","All"],["card","Cards"],["sealed","Sealed"]], () => st.kind, v => st.kind = v);
-  let t; $("q").oninput = e => { clearTimeout(t); t = setTimeout(() => { st.q = e.target.value.trim(); st.page = 0; render(); }, 250); };
-  $("ser").onchange = e => { st.series = e.target.value; st.set = ""; st.page = 0; render(); };
-  $("set").onchange = e => { st.set = e.target.value; st.page = 0; render(); };
-  $("sort").onchange = e => { st.sort = e.target.value; st.page = 0; render(); };
+  let t; $("q").oninput = e => { clearTimeout(t); t = setTimeout(() => { st.q = e.target.value.trim(); st.shown = STEP; render(true); }, 250); };
+  $("ser").onchange = e => { st.seriesId = e.target.value; st.setId = ""; st.shown = STEP; render(true); };
+  $("set").onchange = e => { st.setId = e.target.value; st.shown = STEP; render(true); };
+  $("sort").onchange = e => { st.sort = e.target.value; st.shown = STEP; render(true); };
+  $("reset").onclick = () => { Object.assign(st, { game:"all", lang:"all", kind:"all", seriesId:"", setId:"", shown:STEP }); render(true); };
+  $("grid").innerHTML = '<div class="empty">Loading your collection…</div>';
   [st.sets, st.seriesList] = await Promise.all([fetchAll("sets", "id,name,game_id,series_id,release_date,language"), fetchAll("series", "id,name,game_id,sort_order")]);
+  st.setById = new Map(st.sets.map(s => [s.id, s]));
   await loadCollection();
-  render();
+  render(true);
 }
 async function fetchAll(table, cols){
   const out = []; let from = 0;
@@ -139,118 +172,132 @@ async function fetchAll(table, cols){
 }
 function chips(id, opts, get, set){
   const box = $(id);
-  opts.forEach(([v,label]) => { const b = document.createElement("button"); b.className = "chip"; b.type = "button"; b.textContent = label; b.dataset.v = v;
-    b.onclick = () => { set(v); st.page = 0; render(); }; box.appendChild(b); });
+  opts.forEach(([v, label]) => { const b = document.createElement("button"); b.className = "chip"; b.type = "button"; b.textContent = label; b.dataset.v = v;
+    b.onclick = () => { set(v); st.shown = STEP; render(true); }; box.appendChild(b); });
   box._sync = () => box.querySelectorAll(".chip").forEach(b => b.setAttribute("aria-pressed", String(get() === b.dataset.v)));
 }
+// Sets visible under the current game + language; series only if they contain a visible set.
+function visibleSets(){ return st.sets.filter(s => (st.game === "all" || s.game_id === st.game) && (st.lang === "all" || s.language === st.lang)); }
 function syncLayers(){
-  const inGame = s => st.game === "all" || s.game_id === st.game;
-  const serOpts = st.seriesList.filter(inGame).sort((a,b) => a.game_id.localeCompare(b.game_id) || (b.sort_order ?? -1) - (a.sort_order ?? -1) || a.name.localeCompare(b.name));
-  $("ser").innerHTML = `<option value="">All series</option>` + serOpts.map(s => `<option value="${s.id}" ${String(s.id)===st.series?"selected":""}>${esc((st.game==="all"?GNAME[s.game_id]+" · ":"") + s.name)}</option>`).join("");
-  const setOpts = st.sets.filter(s => inGame(s) && (!st.series || String(s.series_id) === st.series)).sort((a,b) => String(b.release_date||"").localeCompare(String(a.release_date||"")) || a.name.localeCompare(b.name));
-  $("set").innerHTML = `<option value="">All sets</option>` + setOpts.map(s => `<option value="${s.id}" ${String(s.id)===st.set?"selected":""}>${esc((st.game==="all"?GNAME[s.game_id]+" · ":"") + s.name)}</option>`).join("");
+  const vis = visibleSets();
+  const serIds = new Set(vis.map(s => s.series_id));
+  const serOpts = st.seriesList.filter(s => serIds.has(s.id))
+    .sort((a, b) => a.game_id.localeCompare(b.game_id) || (b.sort_order ?? -1) - (a.sort_order ?? -1) || a.name.localeCompare(b.name));
+  if (st.seriesId && !serOpts.some(s => String(s.id) === st.seriesId)) st.seriesId = "";
+  $("ser").innerHTML = '<option value="">All series</option>' + serOpts.map(s => '<option value="' + s.id + '"' + (String(s.id) === st.seriesId ? " selected" : "") + '>' + esc((st.game === "all" ? GNAME[s.game_id] + " · " : "") + s.name) + '</option>').join("");
+  const setOpts = vis.filter(s => !st.seriesId || String(s.series_id) === st.seriesId)
+    .sort((a, b) => String(b.release_date || "").localeCompare(String(a.release_date || "")) || a.name.localeCompare(b.name));
+  if (st.setId && !setOpts.some(s => String(s.id) === st.setId)) st.setId = "";
+  $("set").innerHTML = '<option value="">All sets (' + setOpts.length + ')</option>' + setOpts.map(s => '<option value="' + s.id + '"' + (String(s.id) === st.setId ? " selected" : "") + '>' + esc((st.game === "all" ? GNAME[s.game_id] + " · " : "") + s.name) + '</option>').join("");
+  const n = [st.game !== "all", st.lang !== "all", st.kind !== "all", !!st.seriesId, !!st.setId].filter(Boolean).length;
+  $("fcount").innerHTML = n ? '<span class="badge">' + n + '</span>' : "";
 }
 
 // ---------- data ----------
-const PCOLS = "id,name,card_number,variant,language,kind,image_url,game_id,set_id,rarity,sets(name,release_date,series_id,series(name))";
+const PCOLS = "id,name,card_number,variant,language,kind,image_url,game_id,set_id,rarity";
 async function loadCollection(){
   st.col = []; let from = 0;
   while (true) {
-    const { data, error } = await sb.from("collection_items").select(`id,quantity,condition,grade,date_added,cost_paid,products(${PCOLS})`).range(from, from + 999);
+    const { data, error } = await sb.from("collection_items").select("id,quantity,condition,grade,date_added,cost_paid,products(" + PCOLS + ")").range(from, from + 999);
     if (error || !data || !data.length) break;
     st.col.push(...data); if (data.length < 1000) break; from += 1000;
   }
 }
-const setDate = p => p.sets?.release_date || "";
-const numKey = n => { const m = String(n||"").match(/(\d+)/); return m ? +m[1] : 99999; };
-function sortRows(rows, getP, getC){
-  const by = {
-    "name": (a,b) => getP(a).name.localeCompare(getP(b).name),
-    "-name": (a,b) => getP(b).name.localeCompare(getP(a).name),
-    "set": (a,b) => (getP(a).sets?.name||"").localeCompare(getP(b).sets?.name||"") || numKey(getP(a).card_number) - numKey(getP(b).card_number),
-    "newest": (a,b) => setDate(getP(b)).localeCompare(setDate(getP(a))) || getP(a).name.localeCompare(getP(b).name),
-    "oldest": (a,b) => setDate(getP(a)).localeCompare(setDate(getP(b))) || getP(a).name.localeCompare(getP(b).name),
-    "added": (a,b) => String(getC?.(b)?.date_added||"").localeCompare(String(getC?.(a)?.date_added||"")),
-    "qty": (a,b) => (getC?.(b)?.quantity||0) - (getC?.(a)?.quantity||0)};
-  return rows.sort(by[st.sort] || by.name);
-}
+const setOf = p => st.setById.get(p.set_id) || {};
+const numKey = n => { const m = String(n || "").match(/(\d+)/); return m ? +m[1] : 99999; };
 function matchP(p){
   if (!p) return false;
-  const q = st.q.toLowerCase();
+  const q = st.q.toLowerCase(), s = setOf(p);
   return (st.game === "all" || p.game_id === st.game) && (st.lang === "all" || p.language === st.lang)
-    && (st.kind === "all" || p.kind === st.kind) && (!st.set || String(p.set_id) === st.set)
-    && (!st.series || String(p.sets?.series_id) === st.series)
+    && (st.kind === "all" || p.kind === st.kind) && (!st.setId || String(p.set_id) === st.setId)
+    && (!st.seriesId || String(s.series_id) === st.seriesId)
     && (!q || (p.name + " " + p.card_number).toLowerCase().includes(q));
+}
+function sortCol(rows){
+  const P = c => c.products, d = c => setOf(P(c)).release_date || "";
+  const by = {
+    "name": (a, b) => P(a).name.localeCompare(P(b).name), "-name": (a, b) => P(b).name.localeCompare(P(a).name),
+    "newest": (a, b) => d(b).localeCompare(d(a)) || P(a).name.localeCompare(P(b).name),
+    "oldest": (a, b) => (d(a) || "9").localeCompare(d(b) || "9") || P(a).name.localeCompare(P(b).name),
+    "set": (a, b) => (setOf(P(a)).name || "").localeCompare(setOf(P(b)).name || "") || numKey(P(a).card_number) - numKey(P(b).card_number),
+    "added": (a, b) => String(b.date_added || "").localeCompare(String(a.date_added || "")),
+    "qty": (a, b) => b.quantity - a.quantity };
+  return rows.sort(by[st.sort] || by.name);
 }
 
 // ---------- render ----------
-async function render(){
-  document.querySelectorAll(".tabs button").forEach(b => b.setAttribute("aria-selected", String(b.dataset.t === st.tab)));
-  ["g","l","k"].forEach(id => $(id)._sync()); syncLayers();
-  $("sort").value = st.sort;
-  st.tab === "collection" ? renderCollection() : renderCatalog();
+function render(reset){
+  document.querySelectorAll(".seg button").forEach(b => b.setAttribute("aria-selected", String(b.dataset.t === st.tab)));
+  ["g","l","k"].forEach(id => $(id)._sync()); syncLayers(); $("sort").value = st.sort;
+  st.tab === "collection" ? renderCollection() : renderCatalog(reset);
 }
-function row(p, right){
-  const img = p.image_url ? `<img class="thumb ${p.kind==="sealed"?"sealed":""}" loading="lazy" alt="" src="${esc(p.image_url)}">` : `<div class="thumb"></div>`;
-  return `<li class="item" data-id="${p.id}">${img}<div class="meta"><div class="name">${esc(p.name)}</div>
-    <div class="small muted">${p.language==="JP"?'<span class="tag">JP</span>':""}${p.kind==="sealed"?'<span class="tag">Sealed</span>':""}${esc(GNAME[p.game_id]||p.game_id)} · ${esc(p.sets?.name||"")}${p.card_number?" · "+esc(p.card_number):""}${p.variant?" · "+esc(p.variant):""}</div></div>
-    <div class="right">${right}</div></li>`;
+function tile(p, c){
+  const s = setOf(p);
+  const img = p.image_url ? '<img loading="lazy" alt="" src="' + esc(p.image_url) + '">' : '<div class="ph">' + (p.kind === "sealed" ? "Sealed product" : "Image coming") + '</div>';
+  const flags = (p.language === "JP" ? '<span class="flag jp">JP</span>' : "") + (p.kind === "sealed" ? '<span class="flag sealed">SEALED</span>' : "");
+  const meta = [p.rarity, p.card_number].filter(Boolean).join(" · ");
+  const cond = c && c.condition ? [COND[c.condition] || c.condition, c.grade, p.variant].filter(Boolean).join(" · ") : (p.variant || "");
+  return '<article class="tile" data-id="' + p.id + '"><div class="art">' + img + '<div class="flags">' + flags + '</div>'
+    + (c ? '<span class="qty">×' + c.quantity + '</span>' : "") + '</div><div class="body"><div class="name">' + esc(p.name) + '</div>'
+    + '<button class="setlink" data-set="' + p.set_id + '">' + esc(s.name || "") + '</button>'
+    + (meta ? '<div class="meta">' + esc(meta) + '</div>' : "") + (cond ? '<div class="cond">' + esc(cond) + '</div>' : "")
+    + '<div class="price"><span class="v">eBay price pending</span><button class="more" aria-label="Details">⋯</button></div></div></article>';
 }
 function renderCollection(){
-  const rows = sortRows(st.col.filter(c => matchP(c.products)), c => c.products, c => c);
-  const items = rows.reduce((n,c) => n + c.quantity, 0);
-  $("sum").innerHTML = `<span class="muted">${rows.length.toLocaleString()} lines · ${items.toLocaleString()} items</span><span class="small muted">Values appear once eBay sold data is connected</span>`;
-  const slice = rows.slice(st.page*PAGE, (st.page+1)*PAGE);
-  $("list").innerHTML = slice.length ? slice.map(c => row(c.products, `<b>×${c.quantity}</b>${esc(c.condition)}${c.grade?" · "+esc(c.grade):""}`)).join("")
-    : `<li class="empty">${st.col.length ? "Nothing matches these filters." : "No collection items found for this account yet."}</li>`;
-  pager(rows.length);
-  bindRows(id => st.col.filter(c => c.products?.id === id));
+  const rows = sortCol(st.col.filter(c => matchP(c.products)));
+  const items = rows.reduce((n, c) => n + c.quantity, 0);
+  $("sum").innerHTML = '<span><b>' + items.toLocaleString() + '</b> <span class="muted">items · ' + rows.length.toLocaleString() + ' lines</span></span><span class="small muted">Values arrive once eBay sold data is connected</span>';
+  $("grid").innerHTML = rows.length ? rows.slice(0, st.shown).map(c => tile(c.products, c)).join("")
+    : '<div class="empty">' + (st.col.length ? "Nothing in your collection matches these filters." : "No collection items on this account yet.") + '</div>';
+  moreBtn(rows.length); bind(id => st.col.filter(c => c.products && c.products.id === id));
 }
-async function renderCatalog(){
+async function renderCatalog(reset){
+  const from = reset ? 0 : st.cat.length, to = st.shown - 1;
   let q = sb.from("catalog_v").select("*", { count:"estimated" });
   if (st.game !== "all") q = q.eq("game_id", st.game);
   if (st.lang !== "all") q = q.eq("language", st.lang);
   if (st.kind !== "all") q = q.eq("kind", st.kind);
-  if (st.set) q = q.eq("set_id", +st.set);
-  else if (st.series) q = q.eq("series_id", +st.series);
-  if (st.q) { const t = st.q.replace(/[,()%*]/g," "); q = q.or(`name.ilike.%${t}%,card_number.ilike.%${t}%`); }
+  if (st.setId) q = q.eq("set_id", +st.setId); else if (st.seriesId) q = q.eq("series_id", +st.seriesId);
+  if (st.q) { const t = st.q.replace(/[,()%*]/g, " "); q = q.or("name.ilike.%" + t + "%,card_number.ilike.%" + t + "%"); }
   const order = { "name":[["name",true]], "-name":[["name",false]], "set":[["set_name",true],["card_number",true]],
-    "newest":[["release_date",false],["name",true]], "oldest":[["release_date",true],["name",true]],
-    "added":[["created_at",false]], "qty":[["name",true]] }[st.sort];
-  order.forEach(([c,a]) => q = q.order(c, { ascending:a, nullsFirst:false }));
-  q = q.range(st.page*PAGE, (st.page+1)*PAGE - 1);
-  $("list").innerHTML = `<li class="empty">Loading…</li>`;
-  const res = await q; const error = res.error, count = res.count;
-  const data = (res.data||[]).map(v => ({ ...v, sets:{ name:v.set_name, release_date:v.release_date, series_id:v.series_id, series:{ name:v.series_name } } }));
-  if (error) { $("list").innerHTML = `<li class="empty">Couldn't load: ${esc(error.message)}</li>`; return; }
-  const owned = new Map(); st.col.forEach(c => owned.set(c.products?.id, (owned.get(c.products?.id)||0) + c.quantity));
-  $("sum").innerHTML = `<span class="muted">${(count||0).toLocaleString()} products in catalog</span><span class="small muted">More sets are added automatically</span>`;
-  $("list").innerHTML = data.length ? data.map(p => row(p, owned.get(p.id) ? `<b>×${owned.get(p.id)}</b>owned` : "")).join("") : `<li class="empty">Nothing matches these filters.</li>`;
-  pager(count||0);
-  bindRows(id => st.col.filter(c => c.products?.id === id), data);
+    "newest":[["release_date",false],["name",true]], "oldest":[["release_date",true],["name",true]], "added":[["created_at",false]], "qty":[["name",true]] }[st.sort];
+  order.forEach(([c, a]) => q = q.order(c, { ascending:a, nullsFirst:false }));
+  if (reset) { st.cat = []; $("grid").innerHTML = '<div class="empty">Loading catalog…</div>'; }
+  const res = await q.range(from, to);
+  if (res.error) { $("grid").innerHTML = '<div class="empty">Couldn\'t load: ' + esc(res.error.message) + '</div>'; return; }
+  st.cat = reset ? (res.data || []) : st.cat.concat(res.data || []); st.catCount = res.count || 0;
+  const owned = new Map(); st.col.forEach(c => c.products && owned.set(c.products.id, (owned.get(c.products.id) || 0) + c.quantity));
+  $("sum").innerHTML = '<span><b>' + st.catCount.toLocaleString() + '</b> <span class="muted">products</span></span><span class="small muted">New sets and cards are added automatically</span>';
+  $("grid").innerHTML = st.cat.length ? st.cat.map(p => tile(p, owned.get(p.id) ? { quantity: owned.get(p.id) } : null)).join("")
+    : '<div class="empty">' + (st.setId ? "This set's cards are still being added by the automatic sync. Check back soon." : "Nothing matches these filters.") + '</div>';
+  moreBtn(st.catCount); bind(id => st.col.filter(c => c.products && c.products.id === id), st.cat);
 }
-function pager(total){
-  const pages = Math.max(1, Math.ceil(total / PAGE));
-  $("pager").innerHTML = `<button class="btn" id="prev" ${st.page===0?"disabled":""}>Previous</button><span class="small muted">Page ${st.page+1} of ${pages}</span><button class="btn" id="next" ${st.page>=pages-1?"disabled":""}>Next</button>`;
-  $("prev").onclick = () => { st.page--; render(); scrollTo(0,0); };
-  $("next").onclick = () => { st.page++; render(); scrollTo(0,0); };
+function moreBtn(total){
+  $("more").innerHTML = st.shown < total ? '<button class="loadmore" id="lm">Show more (' + (total - st.shown).toLocaleString() + ' left)</button>' : "";
+  if ($("lm")) $("lm").onclick = () => { st.shown += STEP; st.tab === "collection" ? renderCollection() : renderCatalog(false); };
 }
-function bindRows(ownedFor, list){
-  document.querySelectorAll(".item[data-id]").forEach(li => li.onclick = () => {
-    const id = +li.dataset.id;
-    const p = (list || []).find(x => x.id === id) || st.col.find(c => c.products?.id === id)?.products;
+function bind(ownedFor, list){
+  document.querySelectorAll(".tile").forEach(el => el.onclick = e => {
+    const sl = e.target.closest(".setlink");
+    if (sl) { e.stopPropagation(); const s = st.setById.get(+sl.dataset.set);
+      if (s) { st.game = s.game_id; st.lang = "all"; st.seriesId = ""; st.setId = String(s.id); st.shown = STEP; render(true); scrollTo(0, 0); } return; }
+    const id = +el.dataset.id;
+    const hit = st.col.find(c => c.products && c.products.id === id);
+    const p = (list || []).find(x => x.id === id) || (hit && hit.products);
     openSheet(p, ownedFor(id));
   });
 }
 function openSheet(p, owned){
   if (!p) return;
-  const lines = owned.map(c => `${c.quantity} × ${esc(c.condition)}${c.grade?" "+esc(c.grade):""}${c.date_added?` · added ${esc(c.date_added)}`:""}`).join("<br>");
-  $("sheet").innerHTML = `<button class="close" id="x" aria-label="Close">×</button>
-    ${p.image_url ? `<img alt="${esc(p.name)}" src="${esc(p.image_url)}">` : ""}
-    <h2>${esc(p.name)}</h2>
-    <div class="muted small">${esc(GNAME[p.game_id]||"")} · ${esc(p.sets?.series?.name ? p.sets.series.name + " › " : "")}${esc(p.sets?.name||"")}${p.card_number?" · "+esc(p.card_number):""} · ${p.language==="JP"?"Japanese":"English"}${p.rarity?" · "+esc(p.rarity):""}${p.variant?" · "+esc(p.variant):""}</div>
-    ${owned.length ? `<p><b>In your collection</b><br>${lines}</p>` : ""}
-    <div class="note">eBay sold price, the last 3 sold listings and region comparison will show here once eBay sold data is connected.</div>`;
+  const s = setOf(p), ser = st.seriesList.find(x => x.id === s.series_id);
+  const rows = [["Game", GNAME[p.game_id]], ["Series", ser && ser.name], ["Set", s.name], ["Number", p.card_number], ["Rarity", p.rarity],
+    ["Language", p.language === "JP" ? "Japanese" : "English"], ["Type", p.kind === "sealed" ? "Sealed product" : "Single card"], ["Variant", p.variant]].filter(r => r[1]);
+  const lines = owned.map(c => c.quantity + " × " + esc(COND[c.condition] || c.condition) + (c.grade ? " · " + esc(c.grade) : "") + (c.date_added ? ' <span class="muted">· added ' + esc(c.date_added) + '</span>' : "")).join("<br>");
+  $("sheet").innerHTML = '<button class="close" id="x" aria-label="Close">×</button><div class="hero">'
+    + (p.image_url ? '<img alt="' + esc(p.name) + '" src="' + esc(p.image_url) + '">' : "")
+    + '<div style="flex:1;min-width:200px"><h2>' + esc(p.name) + '</h2><div class="kv">' + rows.map(r => '<span>' + r[0] + '</span><span>' + esc(r[1]) + '</span>').join("") + '</div></div></div>'
+    + (owned.length ? '<div class="box"><h3>In your collection</h3>' + lines + '</div>' : "")
+    + '<div class="box"><h3>eBay sold prices</h3><span class="muted small">The median sold price, the last 3 sold listings (tap to open on eBay) and region comparison will appear here once eBay is connected.</span></div>';
   $("x").onclick = closeSheet; $("scrim").classList.add("open"); $("sheet").classList.add("open");
 }
 function closeSheet(){ $("scrim").classList.remove("open"); $("sheet").classList.remove("open"); }
