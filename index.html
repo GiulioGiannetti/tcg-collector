@@ -86,11 +86,11 @@ select{background:var(--panel);border:1px solid var(--line);border-radius:10px;p
 .box h3{margin:0 0 6px;font-size:14px}
 .close{float:right;border:0;background:var(--tile);border-radius:999px;width:34px;height:34px;cursor:pointer;font-size:18px}
 
-.ctl{display:flex;align-items:center;gap:3px;margin-top:5px}
+.ctl{display:flex;align-items:center;gap:3px;margin-top:5px;min-width:0}
 .q{width:24px;height:24px;border-radius:7px;border:1px solid var(--line);background:var(--panel);font-weight:800;cursor:pointer;line-height:1}
 .qn{min-width:18px;text-align:center;font-weight:800;font-size:12px}
-.cartbtn{margin-left:auto;height:24px;padding:0 7px;border-radius:7px;border:1px solid var(--amber);background:transparent;color:var(--amber);font-weight:800;font-size:11px;cursor:pointer;display:flex;align-items:center;gap:3px}
-.cartbtn svg{width:12px;height:12px}
+.cartbtn{margin-left:auto;height:24px;width:30px;padding:0;justify-content:center;flex:0 0 auto;border-radius:7px;border:1px solid var(--amber);background:transparent;color:var(--amber);font-weight:800;font-size:11px;cursor:pointer;display:flex;align-items:center;gap:3px}
+.cartbtn svg{width:15px;height:15px}
 .price .v.ok{color:var(--ink)}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--tile-hi);border:1px solid var(--line);padding:10px 16px;border-radius:12px;z-index:40;font-weight:700;display:none;max-width:90vw}
 .toast.show{display:block}
@@ -347,7 +347,7 @@ function tile(p, line){
     + (meta ? '<div class="meta">' + esc(meta) + '</div>' : "") + (condTxt ? '<div class="cond">' + esc(condTxt) + '</div>' : "")
     + '<div class="price"><span class="v' + (price != null ? ' ok' : '') + '">' + (price != null ? money(price) : "No sold data yet") + '</span></div>'
     + '<div class="ctl"><button class="q" data-act="dec" aria-label="Remove one from collection">−</button><span class="qn">' + qty + '</span><button class="q" data-act="inc" aria-label="Add one to collection">+</button>'
-    + '<button class="cartbtn" data-act="cart" aria-label="Add to cart">' + CART_ICON + 'Cart</button></div></div></article>';
+    + '<button class="cartbtn" data-act="cart" aria-label="Add to cart" title="Add to cart">' + CART_ICON + '</button></div></div></article>';
 }
 function renderCollection(){
   const rows = sortCol(st.col.filter(c => matchP(c.products)));
