@@ -122,6 +122,25 @@ select{background:var(--panel);border:1px solid var(--line);border-radius:10px;p
 .field{display:grid;gap:4px;margin-top:12px}.field label{font-size:12px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.05em}
 .sheet h2{margin-top:0}
 .sale{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-top:1px solid var(--line);font-size:13px}.sale a{color:var(--ink)}.sale .chip{padding:3px 9px;font-size:11.5px;margin-top:4px}
+.seg{overflow-x:auto}.seg button{white-space:nowrap}
+.inv{display:grid;gap:12px;margin-top:14px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:14px}
+.panel h3{margin:0 0 4px;font-family:"Sora",sans-serif;font-size:16px}
+.kpi{display:flex;justify-content:space-between;align-items:flex-end;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+.bigv{font-family:"Sora",sans-serif;font-size:30px;font-weight:700;letter-spacing:-.02em}
+.up{color:var(--good)}.down{color:#FF8A7A}
+.ranges{display:flex;gap:4px}.ranges .chip{padding:4px 10px;font-size:12px}
+.chart{width:100%;height:auto;display:block}.chart .ax{fill:#8A96A3;font-size:11px;font-family:"Manrope",sans-serif}
+.pie{display:flex;gap:16px;align-items:center;flex-wrap:wrap}.pie svg{width:180px;max-width:46%;flex:0 0 auto}
+.legend{list-style:none;margin:0;padding:0;flex:1;min-width:200px;display:grid;gap:6px;font-size:13px}
+.legend li{display:grid;grid-template-columns:14px 1fr auto auto;gap:8px;align-items:center}
+.sw{width:12px;height:12px;border-radius:3px}
+.tablewrap{overflow-x:auto}
+.rt{width:100%;border-collapse:collapse;font-size:13px;color:var(--ink)}
+.rt th{text-align:left;color:var(--muted);font-weight:700;font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+.rt td{padding:8px;border-bottom:1px solid var(--line);white-space:nowrap;vertical-align:top}
+.rt .setlink{font-size:13px;color:var(--ink)}
+.news{list-style:none;margin:0;padding:0}.news li{padding:9px 0;border-top:1px solid var(--line)}.news a{color:var(--ink);font-weight:600;text-decoration:none}.news a:hover{text-decoration:underline}
 </style>
 </head>
 <body>
@@ -182,7 +201,7 @@ async function boot(){
   if (location.hash) history.replaceState(null, "", location.pathname);
   $("app").innerHTML = '<header>'
     + '<div class="bar"><div class="logo">' + LOGO + 'Sold Ledger</div><button class="iconbtn" id="out">Sign out</button></div>'
-    + '<div class="seg" role="tablist"><button role="tab" data-t="collection">My collection</button><button role="tab" data-t="catalog">Catalog</button><button role="tab" data-t="carts">Carts<span id="cartcount"></span></button></div>'
+    + '<div class="seg" role="tablist"><button role="tab" data-t="collection">My collection</button><button role="tab" data-t="catalog">Catalog</button><button role="tab" data-t="invest">Investment</button><button role="tab" data-t="carts">Carts<span id="cartcount"></span></button></div>'
     + '<div id="browse"><div class="tools"><input class="search" id="q" type="search" placeholder="Search name or number" enterkeyhint="search">'
     + '<button class="iconbtn" id="ftoggle" aria-expanded="false">Filters<span id="fcount"></span></button>'
     + '<select id="sort" aria-label="Sort by"><option value="name">Name A–Z</option><option value="-name">Name Z–A</option>'
@@ -191,7 +210,7 @@ async function boot(){
     + '<div class="drawer" id="drawer"><div class="row" id="g"><span>Game</span></div><div class="row" id="l"><span>Language</span></div>'
     + '<div class="row" id="k"><span>Type</span></div><div class="row"><span>Series</span><select id="ser"></select></div>'
     + '<div class="row"><span>Set</span><select id="set"></select></div><div class="row"><span></span><button class="chip" id="reset">Clear filters</button></div></div></div>'
-    + '</header><div class="summary" id="sum"></div><div class="grid" id="grid"></div><div id="more"></div><div id="cartview"></div>';
+    + '</header><div class="summary" id="sum"></div><div class="grid" id="grid"></div><div id="more"></div><div id="cartview"></div><div id="investview"></div>';
   $("out").onclick = () => sb.auth.signOut();
   document.querySelectorAll(".seg button").forEach(b => b.onclick = () => { st.tab = b.dataset.t; st.shown = STEP; render(true); });
   $("ftoggle").onclick = () => { st.drawer = !st.drawer; $("drawer").classList.toggle("open", st.drawer); $("ftoggle").setAttribute("aria-expanded", st.drawer); };
@@ -254,6 +273,7 @@ async function loadCollection(){
   }
 }
 async function refreshProductLines(pid){
+  st.snaps = null;
   const { data } = await sb.from("collection_items").select(LINE_COLS).eq("product_id", pid);
   st.col = st.col.filter(c => !(c.products && c.products.id === pid)).concat(data || []);
 }
@@ -292,12 +312,15 @@ function render(reset){
   document.querySelectorAll(".seg button").forEach(b => b.setAttribute("aria-selected", String(b.dataset.t === st.tab)));
   const open = st.carts.filter(c => c.status === "open").length;
   $("cartcount").innerHTML = open ? ' <span class="badge">' + open + '</span>' : "";
-  const browsing = st.tab !== "carts";
-  $("browse").style.display = browsing ? "" : "none";
-  ["sum","grid","more"].forEach(id => $(id).style.display = browsing ? "" : "none");
-  $("cartview").style.display = browsing ? "none" : "";
-  if (!browsing) return renderCarts();
+  const t = st.tab, grid = t === "collection" || t === "catalog";
+  $("browse").style.display = t !== "carts" ? "" : "none";
+  $("q").style.display = $("sort").style.display = grid ? "" : "none";
+  ["sum","grid","more"].forEach(id => $(id).style.display = grid ? "" : "none");
+  $("cartview").style.display = t === "carts" ? "" : "none";
+  $("investview").style.display = t === "invest" ? "" : "none";
+  if (t === "carts") return renderCarts();
   ["g","l","k"].forEach(id => $(id)._sync()); syncLayers(); $("sort").value = st.sort;
+  if (t === "invest") return renderInvest();
   st.tab === "collection" ? renderCollection() : renderCatalog(reset);
 }
 function tile(p, line){
@@ -439,6 +462,102 @@ async function renderSold(p, cond, grade){
   });
 }
 function closeSheet(){ $("scrim").classList.remove("open"); $("sheet").classList.remove("open"); }
+
+// ---------- investment ----------
+const SLICE = { "pokemon":["#FFB547","#FFE0A8"], "one-piece":["#FF6B6B","#FFB8B8"], "dragon-ball":["#5FD39A","#B2EDCF"], "magic":["#7FB4FF","#C6DCFF"], "yugioh":["#C49BFF","#E4D4FF"] };
+const passSnap = r => (st.game === "all" || r.game_id === st.game) && (st.lang === "all" || r.language === st.lang) && (st.kind === "all" || r.kind === st.kind)
+  && (!st.setId || String(r.set_id) === st.setId) && (!st.seriesId || String((st.setById.get(r.set_id) || {}).series_id) === st.seriesId);
+function lineChart(pts){
+  if (pts.length < 2) return '<div class="small muted" style="padding:24px 4px">Your value history starts building now: a point is added every night. Once eBay is connected, about 13 weeks of weekly history is filled in from past sales.</div>';
+  const W = 640, H = 220, L = 8, R = 8, T = 14, B = 26, vals = pts.map(p => p.value);
+  let lo = Math.min(...vals), hi = Math.max(...vals); if (hi === lo) { hi += 1; lo = Math.max(0, lo - 1); }
+  const t0 = new Date(pts[0].day).getTime(), t1 = new Date(pts[pts.length - 1].day).getTime() || t0 + 1;
+  const x = d => L + (W - L - R) * ((new Date(d).getTime() - t0) / Math.max(1, t1 - t0));
+  const y = v => T + (H - T - B) * (1 - (v - lo) / (hi - lo));
+  const line = pts.map((p, i) => (i ? "L" : "M") + x(p.day).toFixed(1) + " " + y(p.value).toFixed(1)).join(" ");
+  const area = line + " L" + x(pts[pts.length - 1].day).toFixed(1) + " " + (H - B) + " L" + x(pts[0].day).toFixed(1) + " " + (H - B) + " Z";
+  const fmtD = d => new Date(d).toLocaleDateString("en-AU", { day:"numeric", month:"short" });
+  return '<svg viewBox="0 0 ' + W + ' ' + H + '" class="chart" role="img" aria-label="Portfolio value over time">'
+    + '<defs><linearGradient id="gfill" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#FFB547" stop-opacity=".35"/><stop offset="1" stop-color="#FFB547" stop-opacity="0"/></linearGradient></defs>'
+    + [0, .5, 1].map(f => '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + (T + (H - T - B) * f) + '" y2="' + (T + (H - T - B) * f) + '" stroke="#27313B"/>').join("")
+    + '<path d="' + area + '" fill="url(#gfill)"/><path d="' + line + '" fill="none" stroke="#FFB547" stroke-width="2.5" stroke-linejoin="round"/>'
+    + '<text x="' + L + '" y="' + (T - 3) + '" class="ax">' + money(hi) + '</text><text x="' + L + '" y="' + (H - B - 4) + '" class="ax">' + money(lo) + '</text>'
+    + '<text x="' + L + '" y="' + (H - 6) + '" class="ax">' + fmtD(pts[0].day) + '</text><text x="' + (W - R) + '" y="' + (H - 6) + '" class="ax" text-anchor="end">' + fmtD(pts[pts.length - 1].day) + '</text></svg>';
+}
+function donut(slices, byValue){
+  const total = slices.reduce((n, s) => n + (byValue ? s.value : s.items), 0);
+  if (!total) return '<div class="small muted">Nothing matches these filters.</div>';
+  const R = 70, r = 44, C = 90; let a0 = -Math.PI / 2, paths = "";
+  const pt = (rad, a) => (C + rad * Math.cos(a)).toFixed(2) + " " + (C + rad * Math.sin(a)).toFixed(2);
+  slices.forEach(s => {
+    const share = (byValue ? s.value : s.items) / total; if (share <= 0) return;
+    const col = SLICE[s.game][s.kind === "sealed" ? 1 : 0];
+    if (share >= 0.9999) { paths += '<circle cx="' + C + '" cy="' + C + '" r="' + ((R + r) / 2) + '" fill="none" stroke="' + col + '" stroke-width="' + (R - r) + '"/>'; return; }
+    const a1 = a0 + share * 2 * Math.PI, big = share > .5 ? 1 : 0;
+    paths += '<path d="M' + pt(R, a0) + ' A' + R + ' ' + R + ' 0 ' + big + ' 1 ' + pt(R, a1) + ' L' + pt(r, a1) + ' A' + r + ' ' + r + ' 0 ' + big + ' 0 ' + pt(r, a0) + ' Z" fill="' + col + '" stroke="#101418" stroke-width="1.5"><title>' + esc(GNAME[s.game] + " · " + (s.kind === "sealed" ? "Sealed" : "Cards")) + '</title></path>';
+    a0 = a1;
+  });
+  const legend = slices.filter(s => (byValue ? s.value : s.items) > 0).map(s => {
+    const share = (byValue ? s.value : s.items) / total;
+    return '<li><span class="sw" style="background:' + SLICE[s.game][s.kind === "sealed" ? 1 : 0] + '"></span><span>' + esc(GNAME[s.game]) + ' · ' + (s.kind === "sealed" ? "Sealed" : "Cards") + '</span><b>' + (share * 100).toFixed(1) + '%</b><span class="muted">' + (byValue ? money(s.value) : s.items.toLocaleString() + " items") + '</span></li>'; }).join("");
+  return '<div class="pie"><svg viewBox="0 0 180 180" role="img" aria-label="Portfolio split by game and type">' + paths + '</svg><ul class="legend">' + legend + '</ul></div>';
+}
+async function renderInvest(){
+  const v = $("investview");
+  if (!st.snaps) { v.innerHTML = '<div class="empty" style="margin-top:14px">Loading your portfolio…</div>';
+    st.snaps = await fetchAll("portfolio_snapshots", "day,set_id,game_id,kind,language,items,value,priced_items,source", "day"); }
+  st.invRange = st.invRange || "6M";
+  // today, from your live collection
+  const lines = st.col.filter(c => matchP(c.products));
+  let cur = 0, items = 0, priced = 0; const sm = new Map();
+  GAMES.forEach(([g]) => ["card","sealed"].forEach(k => sm.set(g + "|" + k, { game:g, kind:k, value:0, items:0 })));
+  lines.forEach(c => { const p = c.products, pr = priceOf(p, c.condition, c.grade), val = pr != null ? pr * c.quantity : 0;
+    items += c.quantity; cur += val; if (pr != null) priced += c.quantity;
+    const sl = sm.get(p.game_id + "|" + p.kind); if (sl) { sl.value += val; sl.items += c.quantity; } });
+  const slices = [...sm.values()], byValue = cur > 0;
+  // history
+  const byDay = new Map();
+  st.snaps.filter(passSnap).forEach(r => { const d = byDay.get(r.day) || { value:0, items:0 }; d.value += +r.value; d.items += r.items; byDay.set(r.day, d); });
+  const since = new Date(Date.now() - ({ "1M":31, "3M":92, "6M":183, "1Y":366, "All":1e5 }[st.invRange]) * 864e5).toISOString().slice(0, 10);
+  const pts = [...byDay.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([day, d]) => ({ day, ...d })).filter(p => p.day >= since);
+  const first = pts[0], chg = first && first.value ? cur - first.value : null;
+  v.innerHTML = '<div class="inv">'
+    + '<section class="panel"><div class="kpi"><div><div class="small muted">Portfolio value today</div><div class="bigv">' + money(cur) + '</div>'
+    + '<div class="small ' + (chg == null ? "muted" : chg >= 0 ? "up" : "down") + '">' + (chg == null ? items.toLocaleString() + " items · " + (priced ? priced.toLocaleString() + " priced from eBay AU sold" : "values arrive once eBay is connected")
+        : (chg >= 0 ? "▲ " : "▼ ") + money(Math.abs(chg)) + " (" + (chg / first.value * 100).toFixed(1) + "%) since " + new Date(first.day).toLocaleDateString("en-AU", { day:"numeric", month:"short" })) + '</div></div>'
+    + '<div class="ranges">' + ["1M","3M","6M","1Y","All"].map(k => '<button class="chip" data-range="' + k + '" aria-pressed="' + (st.invRange === k) + '">' + k + '</button>').join("") + '</div></div>'
+    + lineChart(pts) + '</section>'
+    + '<section class="panel"><h3>Diversification</h3><div class="small muted" style="margin-bottom:8px">' + (byValue ? "Share of your portfolio value, by game, cards vs sealed." : "Sized by item count until eBay prices arrive, then by dollar value.") + '</div>' + donut(slices, byValue) + '</section>'
+    + '<section class="panel"><h3>Set value vs booster box</h3><div class="small muted">One copy of every card in the set (Near Mint, ungraded) divided by the booster box price, lowest first. Under 1.0 means the singles cost less than a box.</div><div id="ratios" class="small muted" style="margin-top:10px">Loading…</div></section>'
+    + '<section class="panel"><h3>Headlines</h3><div class="small muted">Latest news from credible sources' + (st.game !== "all" ? " for " + esc(GNAME[st.game]) : " across your games") + '. Refreshed every 3 hours.</div><div id="news" style="margin-top:6px"></div></section>'
+    + '</div>';
+  v.querySelectorAll("[data-range]").forEach(b => b.onclick = () => { st.invRange = b.dataset.range; renderInvest(); });
+  loadRatios(); loadNews();
+}
+async function loadRatios(){
+  let q = sb.from("set_ratio_v").select("*").not("ratio", "is", null);
+  if (st.game !== "all") q = q.eq("game_id", st.game);
+  if (st.lang !== "all") q = q.eq("language", st.lang);
+  if (st.setId) q = q.eq("set_id", +st.setId); else if (st.seriesId) q = q.eq("series_id", +st.seriesId);
+  const { data, error } = await q.order("ratio", { ascending:true }).limit(150);
+  const el = $("ratios"); if (!el) return;
+  if (error) { el.textContent = "Couldn't load: " + error.message; return; }
+  if (!data || !data.length) { el.textContent = "This fills in once eBay prices exist for booster boxes and the cards in their sets."; return; }
+  el.innerHTML = '<div class="tablewrap"><table class="rt"><thead><tr><th>Set</th><th>Box price</th><th>Set value</th><th>Ratio</th><th>Cards priced</th></tr></thead><tbody>'
+    + data.map(r => '<tr><td><button class="setlink" data-setjump="' + r.set_id + '">' + esc(r.set_name) + '</button><div class="muted">' + esc(GNAME[r.game_id] || "") + (r.language === "JP" ? " · JP" : "") + '</div></td><td>' + money(+r.box_price)
+      + '</td><td>' + money(+r.cards_value) + '</td><td><b class="' + (+r.ratio >= 1 ? "up" : "down") + '">' + (+r.ratio).toFixed(2) + '×</b></td><td>' + r.cards_priced + ' / ' + r.cards_total + '</td></tr>').join("") + '</tbody></table></div>';
+  el.querySelectorAll("[data-setjump]").forEach(b => b.onclick = () => { const s = st.setById.get(+b.dataset.setjump); if (!s) return;
+    st.game = s.game_id; st.setId = String(s.id); st.seriesId = ""; st.tab = "catalog"; st.shown = STEP; render(true); scrollTo(0, 0); });
+}
+async function loadNews(){
+  let q = sb.from("news_items").select("game_id,source,title,url,published_at");
+  if (st.game !== "all") q = q.eq("game_id", st.game);
+  const { data } = await q.order("published_at", { ascending:false, nullsFirst:false }).limit(30);
+  const el = $("news"); if (!el) return;
+  el.innerHTML = data && data.length ? '<ul class="news">' + data.map(n => '<li><a href="' + esc(n.url) + '" target="_blank" rel="noopener">' + esc(n.title) + '</a><div class="small muted">'
+      + esc(n.source || "") + (n.published_at ? " · " + new Date(n.published_at).toLocaleDateString("en-AU", { day:"numeric", month:"short" }) : "") + ' · ' + esc(GNAME[n.game_id] || "") + '</div></li>').join("") + '</ul>'
+    : '<div class="small muted">No headlines yet. They arrive within a few hours.</div>';
+}
 
 // ---------- carts ----------
 async function loadCarts(){
