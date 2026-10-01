@@ -121,6 +121,7 @@ select{background:var(--panel);border:1px solid var(--line);border-radius:10px;p
 .sidepick{display:flex;gap:6px;flex-wrap:wrap}.sidepick .chip{flex:1;text-align:center}
 .field{display:grid;gap:4px;margin-top:12px}.field label{font-size:12px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.05em}
 .sheet h2{margin-top:0}
+.sale{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-top:1px solid var(--line);font-size:13px}.sale a{color:var(--ink)}.sale .chip{padding:3px 9px;font-size:11.5px;margin-top:4px}
 </style>
 </head>
 <body>
@@ -376,7 +377,17 @@ async function adjust(p, cond, grade, delta){
   toast((delta > 0 ? "Added 1 × " : "Removed 1 × ") + p.name);
   st.tab === "collection" ? renderCollection() : renderCatalog(false);
 }
-function openSheet(p){
+// eBay AU sold-listings search for this exact item (sold + completed, newest first)
+function ebaySoldUrl(p, cond, grade){
+  const s = setOf(p);
+  let q = p.name.replace(/\s*\(.*?\)\s*/g, " ").trim();
+  if (p.kind === "card" && p.card_number) q += " " + p.card_number;
+  if (p.kind === "sealed" && s.name && !q.toLowerCase().includes(s.name.toLowerCase())) q += " " + s.name;
+  if (p.language === "JP") q += " japanese";
+  if (grade) q += " " + grade; else if (p.kind === "card") q += " -psa -bgs -cgc";
+  return "https://www.ebay.com.au/sch/i.html?_nkw=" + encodeURIComponent(q) + "&LH_Sold=1&LH_Complete=1&_sop=13";
+}
+async function openSheet(p){
   if (!p) return;
   const s = setOf(p), ser = st.seriesList.find(x => x.id === s.series_id);
   const owned = st.col.filter(c => c.products && c.products.id === p.id);
@@ -389,9 +400,43 @@ function openSheet(p){
     + '<div style="flex:1;min-width:200px"><h2>' + esc(p.name) + '</h2><div class="kv">' + rows.map(r => '<span>' + r[0] + '</span><span>' + esc(r[1]) + '</span>').join("") + '</div>'
     + '<button class="btn" id="sheetcart" style="margin-top:12px">Add to cart</button></div></div>'
     + (owned.length ? '<div class="box"><h3>In your collection</h3>' + lines + '</div>' : "")
-    + '<div class="box"><h3>eBay sold prices</h3><span class="muted small">Median of recent eBay AU sold listings, plus the last 3 sales (tap to open on eBay), will show here once eBay is connected.</span></div>';
+    + '<div class="box" id="soldbox"><h3>eBay sold prices</h3><span class="muted small">Loading…</span></div>';
   $("x").onclick = closeSheet; $("sheetcart").onclick = () => openAddToCart(p, owned[0] ? owned[0].condition : "NM", owned[0] ? owned[0].grade : "");
   $("scrim").classList.add("open"); $("sheet").classList.add("open");
+  renderSold(p, owned.length ? owned[0].condition : "NM", owned.length ? (owned[0].grade || "") : "");
+}
+async function renderSold(p, cond, grade){
+  const box = $("soldbox"); if (!box) return;
+  const { data } = await sb.from("sold_review_v").select("*").eq("product_id", p.id).eq("market", "AU").order("sold_at", { ascending:false }).limit(200);
+  const all = data || [];
+  const groups = [...new Set(all.map(r => r.condition + "|" + (r.grade || "")))];
+  const key = cond + "|" + (grade || "");
+  if (!groups.includes(key)) groups.unshift(key);
+  const [gc, gg] = key.split("|");
+  const mine = all.filter(r => r.condition === gc && (r.grade || "") === gg);
+  const cred = mine.filter(r => r.credible), flagged = mine.filter(r => !r.credible);
+  const med = priceOf(p, gc, gg), conf = cred.length;
+  const fmtDate = d => new Date(d).toLocaleDateString("en-AU", { day:"numeric", month:"short", year:"numeric" });
+  const saleRow = (r, btn) => '<div class="sale"><div><a href="' + esc(r.url || ebaySoldUrl(p, gc, gg)) + '" target="_blank" rel="noopener">' + esc(r.title || "eBay listing") + '</a>'
+    + '<div class="small muted">Sold ' + fmtDate(r.sold_at) + (r.exclusion_reason && !r.credible ? ' · ' + esc(r.exclusion_reason) : '') + (r.user_decision ? ' · you chose to ' + r.user_decision : '') + '</div></div>'
+    + '<div style="text-align:right"><b>' + money(+r.price) + '</b><br><button class="chip" data-sale="' + r.id + '" data-dec="' + btn + '">' + (btn === "exclude" ? "Exclude" : "Include") + '</button></div></div>';
+  box.innerHTML = '<h3>eBay sold prices</h3>'
+    + (groups.length > 1 ? '<select id="soldgrp" style="margin-bottom:8px">' + groups.map(k => { const [c, g] = k.split("|"); return '<option value="' + esc(k) + '"' + (k === key ? " selected" : "") + '>' + esc((COND[c] || c) + (g ? " · " + g : "")) + '</option>'; }).join("") + '</select>' : "")
+    + (med != null ? '<div class="big" style="font-family:Sora,sans-serif;font-size:26px;font-weight:700">' + money(med) + '</div><div class="small muted">Median of the latest ' + Math.min(conf, 10) + ' credible eBay AU sales' + (conf < 4 ? ' · low confidence (few sales)' : '') + '</div>'
+                  : '<div class="small muted">No credible eBay AU sales recorded yet for ' + esc((COND[gc] || gc) + (gg ? " · " + gg : "")) + '.</div>')
+    + (cred.length ? '<h4 style="margin:12px 0 4px">Last 3 credible sales</h4>' + cred.slice(0, 3).map(r => saleRow(r, "exclude")).join("") : "")
+    + (flagged.length ? '<details style="margin-top:10px"><summary class="small">' + flagged.length + ' sale(s) excluded as outliers — review</summary>' + flagged.map(r => saleRow(r, "include")).join("") + '</details>' : "")
+    + '<a class="btn" style="display:inline-block;margin-top:12px;text-decoration:none" href="' + esc(ebaySoldUrl(p, gc, gg)) + '" target="_blank" rel="noopener">View all sold listings on eBay ↗</a>';
+  if ($("soldgrp")) $("soldgrp").onchange = e => { const [c, g] = e.target.value.split("|"); renderSold(p, c, g); };
+  box.querySelectorAll("[data-sale]").forEach(b => b.onclick = async () => {
+    const { error } = await sb.from("sold_listings").update({ user_decision: b.dataset.dec, decided_at: new Date().toISOString() }).eq("id", +b.dataset.sale);
+    if (error) return toast(error.message);
+    const { data:pr } = await sb.from("price_v").select("product_id,condition,grade,median,sales,last_sold").eq("product_id", p.id);
+    [...st.prices.keys()].filter(k => k.startsWith(p.id + "|")).forEach(k => st.prices.delete(k));
+    (pr || []).forEach(r => st.prices.set(r.product_id + "|" + r.condition + "|" + (r.grade || ""), r));
+    toast(b.dataset.dec === "exclude" ? "Sale excluded from pricing" : "Sale included in pricing");
+    renderSold(p, gc, gg);
+  });
 }
 function closeSheet(){ $("scrim").classList.remove("open"); $("sheet").classList.remove("open"); }
 
