@@ -149,6 +149,9 @@ select{background:var(--panel);border:1px solid var(--line);border-radius:10px;p
 .pill.mixed{background:#3A4855;color:#E8EDF2}.pill.early{background:transparent;border:1px solid #3A4855;color:#8A96A3}
 .sig{margin:4px 0 0;padding-left:0;list-style:none;font-size:12.5px;display:grid;gap:3px}
 .src{margin-top:8px;color:var(--muted)}.src a{color:var(--muted)}
+.prow{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--line);font-size:13.5px}
+.pact{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;align-items:center}
+.sub4{margin:12px 0 2px;font-size:13px;color:var(--muted)}
 </style>
 </head>
 <body>
@@ -209,7 +212,7 @@ async function boot(){
   if (location.hash) history.replaceState(null, "", location.pathname);
   $("app").innerHTML = '<header>'
     + '<div class="bar"><div class="logo">' + LOGO + 'Sold Ledger</div><button class="iconbtn" id="out">Sign out</button></div>'
-    + '<div class="seg" role="tablist"><button role="tab" data-t="collection">My collection</button><button role="tab" data-t="catalog">Catalog</button><button role="tab" data-t="invest">Investment</button><button role="tab" data-t="carts">Carts<span id="cartcount"></span></button></div>'
+    + '<div class="seg" role="tablist"><button role="tab" data-t="collection">My collection</button><button role="tab" data-t="catalog">Catalog</button><button role="tab" data-t="invest">Investment</button><button role="tab" data-t="carts">Carts<span id="cartcount"></span></button><button role="tab" data-t="friends">Friends<span id="frcount"></span></button></div>'
     + '<div id="browse"><div class="tools"><input class="search" id="q" type="search" placeholder="Search name or number" enterkeyhint="search">'
     + '<button class="iconbtn" id="ftoggle" aria-expanded="false">Filters<span id="fcount"></span></button>'
     + '<select id="sort" aria-label="Sort by"><option value="name">Name A–Z</option><option value="-name">Name Z–A</option>'
@@ -218,7 +221,7 @@ async function boot(){
     + '<div class="drawer" id="drawer"><div class="row" id="g"><span>Game</span></div><div class="row" id="l"><span>Language</span></div>'
     + '<div class="row" id="k"><span>Type</span></div><div class="row"><span>Series</span><select id="ser"></select></div>'
     + '<div class="row"><span>Set</span><select id="set"></select></div><div class="row"><span></span><button class="chip" id="reset">Clear filters</button></div></div></div>'
-    + '</header><div class="summary" id="sum"></div><div class="grid" id="grid"></div><div id="more"></div><div id="cartview"></div><div id="investview"></div>';
+    + '</header><div class="summary" id="sum"></div><div class="grid" id="grid"></div><div id="more"></div><div id="cartview"></div><div id="investview"></div><div id="friendsview"></div>';
   $("out").onclick = () => sb.auth.signOut();
   document.querySelectorAll(".seg button").forEach(b => b.onclick = () => { st.tab = b.dataset.t; st.shown = STEP; render(true); });
   $("ftoggle").onclick = () => { st.drawer = !st.drawer; $("drawer").classList.toggle("open", st.drawer); $("ftoggle").setAttribute("aria-expanded", st.drawer); };
@@ -240,6 +243,7 @@ async function boot(){
   st.prices = new Map(prices.map(r => [r.product_id + "|" + r.condition + "|" + (r.grade || ""), r]));
   await Promise.all([loadCollection(), loadCarts()]);
   render(true);
+  loadSocial().then(updateBadges).catch(() => {});
 }
 async function fetchAll(table, cols, orderCol){
   const out = []; let from = 0;
@@ -321,12 +325,14 @@ function render(reset){
   const open = st.carts.filter(c => c.status === "open").length;
   $("cartcount").innerHTML = open ? ' <span class="badge">' + open + '</span>' : "";
   const t = st.tab, grid = t === "collection" || t === "catalog";
-  $("browse").style.display = t !== "carts" ? "" : "none";
+  $("browse").style.display = t !== "carts" && t !== "friends" ? "" : "none";
   $("q").style.display = $("sort").style.display = grid ? "" : "none";
   ["sum","grid","more"].forEach(id => $(id).style.display = grid ? "" : "none");
   $("cartview").style.display = t === "carts" ? "" : "none";
   $("investview").style.display = t === "invest" ? "" : "none";
+  $("friendsview").style.display = t === "friends" ? "" : "none";
   if (t === "carts") return renderCarts();
+  if (t === "friends") return renderFriends();
   ["g","l","k"].forEach(id => $(id)._sync()); syncLayers(); $("sort").value = st.sort;
   if (t === "invest") return renderInvest();
   st.tab === "collection" ? renderCollection() : renderCatalog(reset);
@@ -429,10 +435,11 @@ async function openSheet(p){
   $("sheet").innerHTML = '<button class="close" id="x" aria-label="Close">×</button><div class="hero">'
     + (p.image_url ? '<img alt="' + esc(p.name) + '" src="' + esc(p.image_url) + '">' : "")
     + '<div style="flex:1;min-width:200px"><h2>' + esc(p.name) + '</h2><div class="kv">' + rows.map(r => '<span>' + r[0] + '</span><span>' + esc(r[1]) + '</span>').join("") + '</div>'
-    + '<button class="btn" id="sheetcart" style="margin-top:12px">Add to cart</button></div></div>'
+    + '<button class="btn" id="sheetcart" style="margin-top:12px">Add to cart</button>' + (owned.length ? ' <button class="iconbtn" id="sheetlist" style="margin-top:12px">List for friends</button>' : "") + '</div></div>'
     + (owned.length ? '<div class="box"><h3>In your collection</h3>' + lines + '</div>' : "")
     + '<div class="box" id="soldbox"><h3>eBay sold prices</h3><span class="muted small">Loading…</span></div>';
   $("x").onclick = closeSheet; $("sheetcart").onclick = () => openAddToCart(p, owned[0] ? owned[0].condition : "NM", owned[0] ? owned[0].grade : "");
+  if ($("sheetlist")) $("sheetlist").onclick = () => openListing(p, owned);
   $("scrim").classList.add("open"); $("sheet").classList.add("open");
   renderSold(p, owned.length ? owned[0].condition : "NM", owned.length ? (owned[0].grade || "") : "");
 }
@@ -596,6 +603,159 @@ async function loadNews(){
       + esc(n.source || "") + (n.published_at ? " · " + new Date(n.published_at).toLocaleDateString("en-AU", { day:"numeric", month:"short" }) : "") + ' · ' + esc(GNAME[n.game_id] || "") + '</div></li>').join("") + '</ul>'
     : '<div class="small muted">No headlines yet. They arrive within a few hours.</div>';
 }
+
+// ---------- friends ----------
+const OFFER_LABEL = { pending:"Waiting for seller", accepted:"Accepted: arrange payment", declined:"Declined", withdrawn:"Withdrawn", sent:"Seller has sent it", received:"Complete" };
+async function loadSocial(){
+  if (!st.me) { const { data } = await sb.auth.getUser(); st.me = data && data.user ? data.user.id : null; }
+  const me = st.me;
+  const [prof, fol] = await Promise.all([sb.from("profiles").select("*").eq("id", me).maybeSingle(), sb.from("follows").select("*")]);
+  st.profile = prof.data || null; st.follows = fol.data || [];
+  const [lst, off] = await Promise.all([
+    sb.from("listings").select("*,products(" + PCOLS + ")").eq("status", "active").order("created_at", { ascending:false }),
+    sb.from("offers").select("*,listings(id,owner_id,condition,grade,price,product_id,products(" + PCOLS + "))").order("updated_at", { ascending:false })]);
+  st.listings = lst.data || []; st.offers = off.data || [];
+  const ids = [...new Set(st.follows.flatMap(f => [f.follower, f.followee]).concat(st.listings.map(l => l.owner_id), st.offers.flatMap(o => [o.buyer_id, o.seller_id])))].filter(Boolean);
+  const [pp, cc] = ids.length ? await Promise.all([sb.from("profiles").select("*").in("id", ids), sb.from("profile_contacts").select("*").in("id", ids)]) : [{ data:[] }, { data:[] }];
+  st.people = new Map((pp.data || []).map(p => [p.id, p])); st.contacts = new Map((cc.data || []).map(c => [c.id, c.contact]));
+  st.socialBadge = st.follows.filter(f => f.followee === me && f.status === "pending").length
+    + st.offers.filter(o => (o.seller_id === me && o.status === "pending") || (o.buyer_id === me && o.status === "sent")).length;
+}
+const who = id => { const p = st.people.get(id); return p ? '<b>' + esc(p.display_name) + '</b> <span class="muted">@' + esc(p.handle) + (p.kind === "organisation" ? " · organisation" : "") + '</span>' : '<span class="muted">Unknown user</span>'; };
+async function renderFriends(){
+  const v = $("friendsview");
+  v.innerHTML = '<div class="empty" style="margin-top:14px">Loading…</div>';
+  await loadSocial(); updateBadges();
+  if (!st.profile) return profileForm(v);
+  const me = st.me, P = st.profile;
+  const incoming = st.follows.filter(f => f.followee === me && f.status === "pending");
+  const outgoing = st.follows.filter(f => f.follower === me && f.status === "pending");
+  const following = st.follows.filter(f => f.follower === me && f.status === "accepted");
+  const followers = st.follows.filter(f => f.followee === me && f.status === "accepted");
+  const feed = st.listings.filter(l => l.owner_id !== me), mine = st.listings.filter(l => l.owner_id === me);
+  const offersIn = st.offers.filter(o => o.seller_id === me), offersOut = st.offers.filter(o => o.buyer_id === me);
+  const person = (id, actions) => '<div class="prow"><div>' + who(id) + (st.contacts.get(id) ? '<div class="small">Contact: ' + esc(st.contacts.get(id)) + '</div>' : "") + '</div><div class="pact">' + actions + '</div></div>';
+  const lrow = (l, act) => { const p = l.products || {}; return '<div class="line">' + (p.image_url ? '<img alt="" src="' + esc(p.image_url) + '">' : '<div class="ph2"></div>')
+    + '<div><div class="nm">' + esc(p.name || "") + '</div><div class="sub">' + esc(setOf(p).name || "") + (p.card_number ? " · " + esc(p.card_number) : "") + ' · ' + esc(COND[l.condition] || l.condition) + (l.grade ? " · " + esc(l.grade) : "") + ' · ×' + l.quantity + '</div>'
+    + '<div class="sub">' + (l.mode === "trade" ? "For trade" : l.mode === "either" ? "Sale or trade" : "For sale") + (l.note ? " · " + esc(l.note) : "") + '</div>' + (l.owner_id !== me ? '<div class="sub">' + who(l.owner_id) + '</div>' : "") + '</div>'
+    + '<div style="text-align:right"><div class="lt">' + (l.price != null ? money(+l.price) : "Offers") + '</div>' + act + '</div></div>'; };
+  const orow = o => { const l = o.listings || {}, p = l.products || {}, mineSell = o.seller_id === me, other = mineSell ? o.buyer_id : o.seller_id;
+    const acts = [];
+    if (mineSell && o.status === "pending") acts.push(["accept","Accept"], ["decline","Decline"]);
+    if (mineSell && o.status === "accepted") acts.push(["sent","Payment received & sent"], ["decline","Cancel"]);
+    if (!mineSell && (o.status === "pending" || o.status === "accepted")) acts.push(["withdraw","Withdraw"]);
+    if (!mineSell && o.status === "sent") acts.push(["received","I've received it"]);
+    return '<div class="line">' + (p.image_url ? '<img alt="" src="' + esc(p.image_url) + '">' : '<div class="ph2"></div>')
+      + '<div><div class="nm">' + esc(p.name || "Listing no longer visible") + '</div><div class="sub">' + (mineSell ? "From " : "To ") + who(other) + '</div>'
+      + '<div class="sub">×' + o.quantity + (o.price != null ? " at " + money(+o.price) + " each" : "") + (o.message ? ' · "' + esc(o.message) + '"' : "") + '</div>'
+      + '<div class="sub"><span class="pill ' + (o.status === "received" ? "pos" : o.status === "declined" || o.status === "withdrawn" ? "early" : "watch") + '">' + esc(OFFER_LABEL[o.status] || o.status) + '</span></div>'
+      + (o.status === "accepted" || o.status === "sent" ? '<div class="sub">' + (st.contacts.get(other) ? "Contact: " + esc(st.contacts.get(other)) : "No contact details shared; message them directly.") + '</div>' : "") + '</div>'
+      + '<div class="pact">' + acts.map(([a, t]) => '<button class="chip" data-offer="' + o.id + '" data-oa="' + a + '">' + t + '</button>').join("") + '</div></div>'; };
+  v.innerHTML = '<div class="inv">'
+    + '<section class="panel"><div class="kpi"><div>' + who(me) + (P.bio ? '<div class="small muted">' + esc(P.bio) + '</div>' : "") + '<div class="small muted">Friends can find you by searching @' + esc(P.handle) + ' once they sign up at giuliogiannetti.github.io/tcg-collector</div></div><button class="iconbtn" id="editprof">Edit profile</button></div></section>'
+    + '<section class="panel"><h3>Find people</h3><div class="row"><input class="search" id="psearch" placeholder="Search by name or @handle"></div><div id="presults"></div></section>'
+    + (incoming.length || outgoing.length ? '<section class="panel"><h3>Requests</h3>' + incoming.map(f => person(f.follower, '<button class="chip" data-fa="accept" data-u="' + f.follower + '">Accept</button><button class="chip" data-fa="reject" data-u="' + f.follower + '">Decline</button>')).join("")
+        + outgoing.map(f => person(f.followee, '<span class="small muted">Requested</span><button class="chip" data-fa="cancel" data-u="' + f.followee + '">Cancel</button>')).join("") + '</section>' : "")
+    + '<section class="panel"><h3>Listings from people you follow</h3>' + (feed.length ? feed.map(l => lrow(l, '<button class="chip" data-offerfor="' + l.id + '">Make offer</button>')).join("") : '<div class="small muted">Nothing listed yet. Follow friends to see what they\'re selling or trading.</div>') + '</section>'
+    + '<section class="panel"><h3>Offers</h3><div class="small muted">Payment and postage are arranged directly between you. Only deal with people you trust.</div>'
+      + (offersIn.length ? '<h4 class="sub4">On your listings</h4>' + offersIn.map(orow).join("") : "")
+      + (offersOut.length ? '<h4 class="sub4">You made</h4>' + offersOut.map(orow).join("") : "")
+      + (!offersIn.length && !offersOut.length ? '<div class="small muted" style="margin-top:6px">No offers yet.</div>' : "") + '</section>'
+    + '<section class="panel"><h3>Your listings</h3><div class="small muted">Only people you\'ve accepted as followers can see these. List an item from its detail view (tap any card in My collection).</div>' + (mine.length ? mine.map(l => lrow(l, '<button class="chip" data-withdraw="' + l.id + '">Withdraw</button>')).join("") : "") + '</section>'
+    + '<section class="panel"><h3>Following (' + following.length + ')</h3>' + (following.map(f => person(f.followee, '<button class="chip" data-fa="unfollow" data-u="' + f.followee + '">Unfollow</button>')).join("") || '<div class="small muted">Not following anyone yet.</div>')
+    + '<h3 style="margin-top:12px">Followers (' + followers.length + ')</h3>' + (followers.map(f => person(f.follower, '<button class="chip" data-fa="remove" data-u="' + f.follower + '">Remove</button>')).join("") || '<div class="small muted">No followers yet.</div>') + '</section>'
+    + '</div>';
+  $("editprof").onclick = () => profileForm(v);
+  let t; $("psearch").oninput = e => { clearTimeout(t); t = setTimeout(() => searchPeople(e.target.value.trim()), 300); };
+  v.querySelectorAll("[data-fa]").forEach(b => b.onclick = () => followAction(b.dataset.fa, b.dataset.u));
+  v.querySelectorAll("[data-oa]").forEach(b => b.onclick = async () => {
+    if (b.dataset.oa === "sent" && !confirm("Confirm you've been paid and have sent the item(s)? This removes them from your collection.")) return;
+    const { error } = await sb.rpc("offer_action", { p_offer: +b.dataset.offer, p_action: b.dataset.oa });
+    if (error) return toast(error.message);
+    if (b.dataset.oa === "sent" || b.dataset.oa === "received") { await loadCollection(); st.snaps = null; }
+    toast("Updated"); renderFriends(); });
+  v.querySelectorAll("[data-offerfor]").forEach(b => b.onclick = () => openOffer(st.listings.find(l => l.id === +b.dataset.offerfor)));
+  v.querySelectorAll("[data-withdraw]").forEach(b => b.onclick = async () => { if (!confirm("Withdraw this listing?")) return;
+    const { error } = await sb.from("listings").update({ status:"withdrawn" }).eq("id", +b.dataset.withdraw); if (error) return toast(error.message); renderFriends(); });
+}
+function profileForm(v){
+  const P = st.profile || {}, contact = st.contacts && st.contacts.get(st.me) || "";
+  v.innerHTML = '<section class="panel" style="margin-top:14px;max-width:520px"><h3>' + (st.profile ? "Edit your profile" : "Set up your profile") + '</h3><div class="small muted">Friends and organisations find you by your handle. Your contact detail is only shown to people you\'re connected with.</div>'
+    + '<div class="field"><label>Handle</label><input class="search" id="pf-h" value="' + esc(P.handle || "") + '" placeholder="e.g. giulio_tcg" ' + (st.profile ? "disabled" : "") + '><span class="small muted">3–20 lowercase letters, numbers or _</span></div>'
+    + '<div class="field"><label>Display name</label><input class="search" id="pf-n" value="' + esc(P.display_name || "") + '"></div>'
+    + '<div class="field"><label>Type</label><select id="pf-k"><option value="person"' + (P.kind !== "organisation" ? " selected" : "") + '>Person</option><option value="organisation"' + (P.kind === "organisation" ? " selected" : "") + '>Organisation / shop</option></select></div>'
+    + '<div class="field"><label>Bio (optional)</label><input class="search" id="pf-b" value="' + esc(P.bio || "") + '" maxlength="280"></div>'
+    + '<div class="field"><label>Contact for connections (optional)</label><input class="search" id="pf-c" value="' + esc(contact) + '" maxlength="200" placeholder="e.g. Instagram @handle or phone"></div>'
+    + '<p class="warn" id="pf-err"></p><button class="btn" id="pf-save">Save</button>' + (st.profile ? ' <button class="iconbtn" id="pf-cancel">Cancel</button>' : "") + '</section>';
+  if ($("pf-cancel")) $("pf-cancel").onclick = () => renderFriends();
+  $("pf-save").onclick = async () => {
+    const row = { display_name: $("pf-n").value.trim(), kind: $("pf-k").value, bio: $("pf-b").value.trim() || null };
+    let res;
+    if (st.profile) res = await sb.from("profiles").update(row).eq("id", st.me);
+    else { row.handle = $("pf-h").value.trim().toLowerCase(); res = await sb.from("profiles").insert(row); }
+    if (res.error) { $("pf-err").textContent = /duplicate|unique/i.test(res.error.message) ? "That handle is taken." : /check/i.test(res.error.message) ? "Handle must be 3–20 lowercase letters, numbers or _, and a name is required." : res.error.message; return; }
+    const c = $("pf-c").value.trim();
+    await sb.from("profile_contacts").upsert({ id: st.me, contact: c || null });
+    toast("Profile saved"); renderFriends();
+  };
+}
+async function searchPeople(q){
+  const el = $("presults"); if (!el) return;
+  if (q.length < 2) { el.innerHTML = ""; return; }
+  const t = q.replace(/^@/, "").replace(/[,()*%]/g, " ");
+  const { data } = await sb.from("profiles").select("*").or("handle.ilike.*" + t + "*,display_name.ilike.*" + t + "*").neq("id", st.me).limit(20);
+  el.innerHTML = (data || []).map(p => { st.people.set(p.id, p);
+    const f = st.follows.find(x => x.follower === st.me && x.followee === p.id);
+    const act = !f ? '<button class="chip" data-fa="follow" data-u="' + p.id + '">Follow</button>' : f.status === "pending" ? '<span class="small muted">Requested</span>' : '<span class="small muted">Following</span>';
+    return '<div class="prow"><div>' + who(p.id) + (p.bio ? '<div class="small muted">' + esc(p.bio) + '</div>' : "") + '</div><div class="pact">' + act + '</div></div>'; }).join("") || '<div class="small muted">No one found.</div>';
+  el.querySelectorAll("[data-fa]").forEach(b => b.onclick = () => followAction(b.dataset.fa, b.dataset.u));
+}
+async function followAction(a, u){
+  let res;
+  if (a === "follow") res = await sb.from("follows").insert({ followee: u });
+  else if (a === "accept") res = await sb.from("follows").update({ status:"accepted" }).eq("follower", u).eq("followee", st.me);
+  else if (a === "reject" || a === "remove") res = await sb.from("follows").delete().eq("follower", u).eq("followee", st.me);
+  else if (a === "cancel" || a === "unfollow") res = await sb.from("follows").delete().eq("follower", st.me).eq("followee", u);
+  if (res && res.error) return toast(res.error.message);
+  toast({ follow:"Request sent", accept:"Accepted", reject:"Declined", remove:"Removed", cancel:"Request cancelled", unfollow:"Unfollowed" }[a]);
+  renderFriends();
+}
+function openOffer(l){
+  if (!l) return; const p = l.products || {};
+  $("sheet").innerHTML = '<button class="close" id="x" aria-label="Close">×</button><h2>Make an offer</h2><div class="small muted">' + esc(p.name || "") + ' · ' + esc(COND[l.condition] || l.condition) + ' · ×' + l.quantity + ' available · listed ' + (l.price != null ? "at " + money(+l.price) : "for offers") + '</div><div class="small">' + who(l.owner_id) + '</div>'
+    + '<div class="field"><label>Quantity</label><input class="search" id="of-q" type="number" min="1" max="' + l.quantity + '" value="1"></div>'
+    + '<div class="field"><label>Your price each (AUD)</label><input class="search" id="of-p" inputmode="decimal" value="' + (l.price != null ? (+l.price).toFixed(2) : "") + '"></div>'
+    + '<div class="field"><label>Message (optional)</label><input class="search" id="of-m" maxlength="500" placeholder="e.g. Can pay by bank transfer, Melbourne pickup ok"></div>'
+    + '<p class="small muted">Payment and postage are arranged directly with the seller after they accept.</p><button class="btn" id="of-send">Send offer</button>';
+  $("x").onclick = closeSheet; $("scrim").classList.add("open"); $("sheet").classList.add("open");
+  $("of-send").onclick = async () => {
+    const q = Math.max(1, Math.min(l.quantity, +$("of-q").value || 1)), pr = $("of-p").value.trim() === "" ? null : Math.max(0, +$("of-p").value.replace(/[^0-9.]/g, ""));
+    const { error } = await sb.from("offers").insert({ listing_id: l.id, quantity: q, price: pr, message: $("of-m").value.trim() || null, seller_id: l.owner_id });
+    if (error) return toast(error.message);
+    closeSheet(); toast("Offer sent"); renderFriends();
+  };
+}
+function openListing(p, owned){
+  const opts = owned.map(c => ({ key: c.condition + "|" + (c.grade || ""), label: (COND[c.condition] || c.condition) + (c.grade ? " · " + c.grade : ""), have: c.quantity }));
+  $("sheet").innerHTML = '<button class="close" id="x" aria-label="Close">×</button><h2>List for friends</h2><div class="small muted">' + esc(p.name) + ' · only your accepted followers will see this</div>'
+    + '<div class="field"><label>Copy</label><select id="ls-c">' + opts.map(o => '<option value="' + esc(o.key) + '">' + esc(o.label) + ' (you own ' + o.have + ')</option>').join("") + '</select></div>'
+    + '<div class="field"><label>Quantity</label><input class="search" id="ls-q" type="number" min="1" value="1"></div>'
+    + '<div class="field"><label>Type</label><select id="ls-m"><option value="sale">For sale</option><option value="trade">For trade</option><option value="either">Sale or trade</option></select></div>'
+    + '<div class="field"><label>Price each (AUD, leave blank for offers)</label><input class="search" id="ls-p" inputmode="decimal" value="' + (priceOf(p, owned[0].condition, owned[0].grade) != null ? priceOf(p, owned[0].condition, owned[0].grade).toFixed(2) : "") + '"></div>'
+    + '<div class="field"><label>Note (optional)</label><input class="search" id="ls-n" maxlength="280"></div>'
+    + '<p class="warn" id="ls-err"></p><button class="btn" id="ls-save">List it</button>';
+  $("x").onclick = closeSheet;
+  $("ls-save").onclick = async () => {
+    if (!st.profile) { await loadSocial(); if (!st.profile) { $("ls-err").textContent = "Set up your profile in the Friends tab first."; return; } }
+    const [c, g] = $("ls-c").value.split("|");
+    const row = { product_id: p.id, condition: c, grade: g || "", quantity: Math.max(1, +$("ls-q").value || 1), mode: $("ls-m").value,
+      price: $("ls-p").value.trim() === "" ? null : Math.max(0, +$("ls-p").value.replace(/[^0-9.]/g, "")), note: $("ls-n").value.trim() || null };
+    const { error } = await sb.from("listings").insert(row);
+    if (error) { $("ls-err").textContent = error.message; return; }
+    closeSheet(); toast("Listed for your followers");
+  };
+}
+function updateBadges(){ const b = $("frcount"); if (b) b.innerHTML = st.socialBadge ? ' <span class="badge">' + st.socialBadge + '</span>' : ""; }
 
 // ---------- carts ----------
 async function loadCarts(){
