@@ -1,7 +1,7 @@
 {
-  "name": "Sold Ledger",
-  "short_name": "Sold Ledger",
-  "description": "Your trading card collection, priced by eBay sold listings.",
+  "name": "Pullfolio",
+  "short_name": "Pullfolio",
+  "description": "Your trading card collection and investments, priced by eBay sold listings.",
   "start_url": "/tcg-collector/",
   "scope": "/tcg-collector/",
   "display": "standalone",
