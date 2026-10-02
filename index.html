@@ -167,6 +167,16 @@ select{background:var(--panel);border:1px solid var(--line);border-radius:10px;p
 .mlist{max-height:280px;overflow:auto;display:grid;gap:1px}
 .mlist label{display:flex;gap:8px;align-items:center;padding:6px 6px;border-radius:7px;font-size:13px;cursor:pointer}
 .mlist label:hover{background:var(--tile)}.mlist input{accent-color:#FFB547;width:16px;height:16px}
+.snap{display:grid;gap:2px}
+.snap-g{margin:10px 0 2px;font-size:11.5px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.snap-row{display:grid;grid-template-columns:1fr auto auto 12px;gap:10px;align-items:center;width:100%;text-align:left;background:var(--tile);border:1px solid var(--line);border-radius:10px;padding:9px 11px;cursor:pointer}
+.snap-row:hover{border-color:#3A4855}
+.snap-n{font-weight:700;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.snap-d{font-size:12px;color:var(--muted);white-space:nowrap}
+.snap-c{color:var(--muted);font-weight:800}
+.snap-none{padding:6px 2px}
+.sent{font-weight:800;font-size:12.5px;white-space:nowrap}
+.sent.hot{color:#FFB547}.sent.pos{color:#5FD39A}.sent.watch{color:#7FB4FF}.sent.mixed{color:#B8C2CC}.sent.early{color:#8A96A3}
 </style>
 </head>
 <body>
@@ -584,7 +594,7 @@ async function renderInvest(){
     + lineChart(pts) + '</section>'
     + '<section class="panel"><h3>Diversification</h3><div class="small muted" style="margin-bottom:8px">' + (byValue ? "Share of your portfolio value, by game, cards vs sealed." : "Sized by item count until eBay prices arrive, then by dollar value.") + '</div>' + donut(slices, byValue) + '</section>'
     + '<section class="panel"><h3>Set value vs booster box</h3><div class="small muted">One copy of every card in the set (Near Mint, ungraded) divided by the booster box price, lowest first. Under 1.0 means the singles cost less than a box.</div><div id="ratios" class="small muted" style="margin-top:10px">Loading…</div></section>'
-    + '<section class="panel"><h3>Upcoming sets: investment sentiment</h3><div class="small muted">The next two English releases for each game, with the community view on whether each looks like a good set to invest in, from credible published sources. Headlines refresh every 3 hours. Not financial advice.</div><div id="upcoming" style="margin-top:8px"></div></section>'
+    + '<section class="panel"><h3>Upcoming sets: investment sentiment</h3><div class="small muted">Next two releases per game. Tap a set for the full picture. Not financial advice.</div><div id="upcoming" style="margin-top:8px"></div></section>'
     + '</div>';
   v.querySelectorAll("[data-range]").forEach(b => b.onclick = () => { st.invRange = b.dataset.range; renderInvest(); });
   loadRatios(); loadUpcoming();
@@ -605,6 +615,7 @@ async function loadRatios(){
     st.game = s.game_id; st.setIds = [String(s.id)]; st.seriesIds = []; st.tab = "catalog"; st.shown = STEP; render(true); scrollTo(0, 0); });
 }
 const PILL = { "Strong hype":"hot", "Positive":"pos", "Watch":"watch", "Mixed":"mixed", "Too early":"early" };
+const WORD = { "Strong hype":"Hot", "Too early":"Early" };   // one-word labels for the snapshot
 async function loadUpcoming(){
   const el = $("upcoming"); if (!el) return;
   const { data:sets, error } = await sb.from("upcoming_sets").select("*").eq("active", true);
@@ -613,26 +624,35 @@ async function loadUpcoming(){
   const games = st.game === "all" ? GAMES.map(g => g[0]) : [st.game];
   const byGame = games.map(g => [g, (sets || []).filter(s => s.game_id === g && (!s.release_date || s.release_date >= keep))
     .sort((a, b) => (a.release_date || "9999").localeCompare(b.release_date || "9999")).slice(0, 2)]);
-  const kws = [...new Set(byGame.flatMap(([, ss]) => ss.flatMap(s => s.keywords || [])))];
-  let news = [];
+  st.upc = byGame.flatMap(([, ss]) => ss);
+  const short = d => new Date(d + "T00:00:00").toLocaleDateString("en-AU", { day:"numeric", month:"short" });
+  el.innerHTML = '<div class="snap">' + byGame.map(([g, ss]) => '<div class="snap-g">' + esc(GNAME[g]) + '</div>'
+    + (ss.length ? ss.map(s => '<button class="snap-row" data-upc="' + s.id + '"><span class="snap-n">' + esc(s.name) + '</span>'
+        + '<span class="snap-d">' + (s.release_date ? short(s.release_date) : "TBC") + '</span>'
+        + '<span class="sent ' + (PILL[s.sentiment] || "mixed") + '">' + esc(WORD[s.sentiment] || s.sentiment) + '</span><span class="snap-c" aria-hidden="true">›</span></button>').join("")
+      : '<div class="small muted snap-none">No upcoming sets on record</div>')).join("") + '</div>';
+  el.querySelectorAll("[data-upc]").forEach(b => b.onclick = () => openUpcoming(st.upc.find(s => s.id === +b.dataset.upc)));
+}
+async function openUpcoming(s){
+  if (!s) return;
+  const fmt = d => new Date(d + "T00:00:00").toLocaleDateString("en-AU", { day:"numeric", month:"short", year:"numeric" });
+  $("sheet").innerHTML = '<button class="close" id="x" aria-label="Close">×</button><h2>' + esc(s.name) + (s.code ? ' <span class="muted small">' + esc(s.code) + '</span>' : "") + '</h2>'
+    + '<div class="small muted">' + esc(GNAME[s.game_id] || "") + ' · ' + (s.release_date ? fmt(s.release_date) + (s.date_note && s.date_note !== "Confirmed" ? " · " + esc(s.date_note) : "") : esc(s.date_note || "Date TBC")) + '</div>'
+    + '<div style="margin:10px 0"><span class="pill ' + (PILL[s.sentiment] || "mixed") + '">' + esc(s.sentiment) + '</span></div>'
+    + '<p class="small">' + esc(s.summary) + '</p>'
+    + (s.signals && s.signals.length ? '<ul class="sig">' + s.signals.map(x => '<li>' + esc(x) + '</li>').join("") + '</ul>' : "")
+    + '<div class="box"><h3>Latest news</h3><div id="upcnews" class="small muted">Loading…</div></div>'
+    + '<div class="src small">Sources: ' + (s.sources || []).map(x => '<a href="' + esc(x.url) + '" target="_blank" rel="noopener">' + esc(x.title) + '</a>').join(" · ") + ' · reviewed ' + fmt(s.reviewed_on) + '. Not financial advice.</div>';
+  $("x").onclick = closeSheet; $("scrim").classList.add("open"); $("sheet").classList.add("open");
+  const kws = s.keywords || []; let news = [];
   if (kws.length) {
-    const { data } = await sb.from("news_items").select("title,url,source,published_at,game_id")
+    const { data } = await sb.from("news_items").select("title,url,source,published_at,game_id").eq("game_id", s.game_id)
       .or(kws.map(k => 'title.ilike."*' + k.replace(/["*,()]/g, " ") + '*"').join(","))
-      .order("published_at", { ascending:false, nullsFirst:false }).limit(300);
+      .order("published_at", { ascending:false, nullsFirst:false }).limit(8);
     news = data || [];
   }
-  const fmt = d => new Date(d + "T00:00:00").toLocaleDateString("en-AU", { day:"numeric", month:"short", year:"numeric" });
-  el.innerHTML = byGame.map(([g, ss]) => '<div class="upc-game"><h4>' + esc(GNAME[g]) + '</h4>'
-    + (ss.length ? ss.map(s => {
-        const hits = news.filter(n => n.game_id === s.game_id && (s.keywords || []).some(k => n.title.toLowerCase().includes(k.toLowerCase()))).slice(0, 3);
-        return '<div class="upc"><div class="upc-top"><div><b>' + esc(s.name) + '</b>' + (s.code ? ' <span class="muted small">' + esc(s.code) + '</span>' : "")
-          + '<div class="small muted">' + (s.release_date ? fmt(s.release_date) + (s.date_note && s.date_note !== "Confirmed" ? " · " + esc(s.date_note) : "") : esc(s.date_note || "Date TBC")) + '</div></div>'
-          + '<span class="pill ' + (PILL[s.sentiment] || "mixed") + '">' + esc(s.sentiment) + '</span></div>'
-          + '<p class="small" style="margin:6px 0">' + esc(s.summary) + '</p>'
-          + (s.signals && s.signals.length ? '<ul class="sig">' + s.signals.map(x => '<li>' + esc(x) + '</li>').join("") + '</ul>' : "")
-          + (hits.length ? '<div class="small muted" style="margin-top:6px">Latest news</div><ul class="news">' + hits.map(n => '<li><a href="' + esc(n.url) + '" target="_blank" rel="noopener">' + esc(n.title) + '</a><div class="small muted">' + esc(n.source || "") + (n.published_at ? " · " + new Date(n.published_at).toLocaleDateString("en-AU", { day:"numeric", month:"short" }) : "") + '</div></li>').join("") + '</ul>' : "")
-          + '<div class="src small">Sources: ' + (s.sources || []).map(x => '<a href="' + esc(x.url) + '" target="_blank" rel="noopener">' + esc(x.title) + '</a>').join(" · ") + ' · reviewed ' + fmt(s.reviewed_on) + '</div></div>';
-      }).join("") : '<div class="small muted">No upcoming sets on record.</div>') + '</div>').join("");
+  const el = $("upcnews"); if (!el) return;
+  el.innerHTML = news.length ? '<ul class="news">' + news.map(n => '<li><a href="' + esc(n.url) + '" target="_blank" rel="noopener">' + esc(n.title) + '</a><div class="small muted">' + esc(n.source || "") + (n.published_at ? " · " + new Date(n.published_at).toLocaleDateString("en-AU", { day:"numeric", month:"short" }) : "") + '</div></li>').join("") + '</ul>' : "No recent headlines for this set yet.";
 }
 async function loadNews(){
   let q = sb.from("news_items").select("game_id,source,title,url,published_at");
