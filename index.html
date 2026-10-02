@@ -47,7 +47,13 @@ select{background:var(--panel);border:1px solid var(--line);border-radius:10px;p
 .summary b{font-family:"Sora",sans-serif;font-size:22px}
 .muted{color:var(--muted)}.small{font-size:12.5px}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(134px,1fr));gap:10px}
-@media (max-width:420px){.grid{grid-template-columns:repeat(2,1fr);gap:7px}}
+@media (max-width:420px){.grid{grid-template-columns:repeat(2,1fr);gap:7px}
+  .art{aspect-ratio:93/50;padding:4px}
+  .body{padding:6px 8px 7px;gap:1px}
+  .name{font-size:12px;line-height:1.2}
+  .setlink,.meta,.cond{font-size:10.5px;line-height:1.25}
+  .price{padding-top:3px}.price .v{font-size:11.5px}
+  .ctl{margin-top:4px}}
 .tile{background:var(--tile);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;display:flex;flex-direction:column;cursor:pointer;transition:border-color .15s}
 .tile:hover{border-color:#3A4855}
 .art{aspect-ratio:125/96;background:radial-gradient(120% 90% at 50% 20%,#233040 0%,#141A20 70%);display:flex;align-items:center;justify-content:center;padding:6px;position:relative}
@@ -152,6 +158,15 @@ select{background:var(--panel);border:1px solid var(--line);border-radius:10px;p
 .prow{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--line);font-size:13.5px}
 .pact{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;align-items:center}
 .sub4{margin:12px 0 2px;font-size:13px;color:var(--muted)}
+.msel{position:relative;flex:1 1 240px;max-width:460px}
+.mbtn{width:100%;display:flex;justify-content:space-between;gap:8px;background:var(--tile);border:1px solid var(--line);border-radius:10px;padding:9px 11px;cursor:pointer;text-align:left}
+.mbtn span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mpanel{position:absolute;z-index:30;left:0;right:0;top:calc(100% + 4px);background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:8px;box-shadow:0 12px 30px rgba(0,0,0,.45)}
+.msearch{width:100%}
+.mact{display:flex;gap:6px;margin:8px 0;flex-wrap:wrap}.mact .chip{padding:4px 10px;font-size:12px}.mdone{margin-left:auto;background:var(--amber)!important;color:var(--amber-ink);border-color:var(--amber)!important}
+.mlist{max-height:280px;overflow:auto;display:grid;gap:1px}
+.mlist label{display:flex;gap:8px;align-items:center;padding:6px 6px;border-radius:7px;font-size:13px;cursor:pointer}
+.mlist label:hover{background:var(--tile)}.mlist input{accent-color:#FFB547;width:16px;height:16px}
 </style>
 </head>
 <body>
@@ -174,7 +189,7 @@ const AUD = new Intl.NumberFormat("en-AU", { style:"currency", currency:"AUD" })
 const money = v => v == null || isNaN(v) ? "—" : AUD.format(v);
 const LOGO = '<svg viewBox="0 0 32 32" aria-hidden="true"><rect x="4" y="3" width="18" height="25" rx="3" fill="#27313B"/><rect x="10" y="5" width="18" height="25" rx="3" fill="#FFB547"/><path d="M14 13h10M14 17h10M14 21h6" stroke="#1B1406" stroke-width="2.2" stroke-linecap="round"/></svg>';
 const CART_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4h2l2.4 11.2a2 2 0 0 0 2 1.6h7.7a2 2 0 0 0 2-1.5L21 8H6"/><circle cx="10" cy="20" r="1.3"/><circle cx="17" cy="20" r="1.3"/></svg>';
-const st = { tab:"collection", game:"all", lang:"all", kind:"all", seriesId:"", setId:"", q:"", sort:"name", shown:48,
+const st = { tab:"collection", game:"all", lang:"all", kind:"all", seriesIds:[], setIds:[], owned:"all", q:"", sort:"name", shown:48,
              sets:[], seriesList:[], col:[], cat:[], catCount:0, drawer:false, setById:new Map(), prices:new Map(),
              carts:[], cartId:null, cartItems:[] };
 const STEP = 48;
@@ -219,20 +234,19 @@ async function boot(){
     + '<option value="value">Highest value</option><option value="newest">Newest set</option><option value="oldest">Oldest set</option><option value="set">Set &amp; number</option>'
     + '<option value="added">Recently added</option><option value="qty">Most copies</option></select></div>'
     + '<div class="drawer" id="drawer"><div class="row" id="g"><span>Game</span></div><div class="row" id="l"><span>Language</span></div>'
-    + '<div class="row" id="k"><span>Type</span></div><div class="row"><span>Series</span><select id="ser"></select></div>'
-    + '<div class="row"><span>Set</span><select id="set"></select></div><div class="row"><span></span><button class="chip" id="reset">Clear filters</button></div></div></div>'
+    + '<div class="row" id="k"><span>Type</span></div><div class="row"><span>Series</span><div class="msel" id="ser"></div></div>'
+    + '<div class="row"><span>Sets</span><div class="msel" id="set"></div></div><div class="row" id="o"><span>Owned</span></div><div class="row"><span></span><button class="chip" id="reset">Clear filters</button></div></div></div>'
     + '</header><div class="summary" id="sum"></div><div class="grid" id="grid"></div><div id="more"></div><div id="cartview"></div><div id="investview"></div><div id="friendsview"></div>';
   $("out").onclick = () => sb.auth.signOut();
   document.querySelectorAll(".seg button").forEach(b => b.onclick = () => { st.tab = b.dataset.t; st.shown = STEP; render(true); });
   $("ftoggle").onclick = () => { st.drawer = !st.drawer; $("drawer").classList.toggle("open", st.drawer); $("ftoggle").setAttribute("aria-expanded", st.drawer); };
-  chips("g", [["all","All"], ...GAMES], () => st.game, v => { st.game = v; st.seriesId = ""; st.setId = ""; });
-  chips("l", [["all","All"],["EN","English"],["JP","Japanese"]], () => st.lang, v => { st.lang = v; st.seriesId = ""; st.setId = ""; });
+  chips("g", [["all","All"], ...GAMES], () => st.game, v => { st.game = v; st.seriesIds = []; st.setIds = []; });
+  chips("l", [["all","All"],["EN","English"],["JP","Japanese"]], () => st.lang, v => { st.lang = v; st.seriesIds = []; st.setIds = []; });
+  chips("o", [["all","All"],["owned","Owned"],["missing","Not owned"]], () => st.owned, v => st.owned = v);
   chips("k", [["all","All"],["card","Cards"],["sealed","Sealed"]], () => st.kind, v => st.kind = v);
   let t; $("q").oninput = e => { clearTimeout(t); t = setTimeout(() => { st.q = e.target.value.trim(); st.shown = STEP; render(true); }, 250); };
-  $("ser").onchange = e => { st.seriesId = e.target.value; st.setId = ""; st.shown = STEP; render(true); };
-  $("set").onchange = e => { st.setId = e.target.value; st.shown = STEP; render(true); };
   $("sort").onchange = e => { st.sort = e.target.value; st.shown = STEP; render(true); };
-  $("reset").onclick = () => { Object.assign(st, { game:"all", lang:"all", kind:"all", seriesId:"", setId:"", shown:STEP }); render(true); };
+  $("reset").onclick = () => { Object.assign(st, { game:"all", lang:"all", kind:"all", seriesIds:[], setIds:[], owned:"all", shown:STEP }); render(true); };
   $("grid").innerHTML = '<div class="empty">Loading your collection…</div>';
   const [sets, series, prices] = await Promise.all([
     fetchAll("sets", "id,name,game_id,series_id,release_date,language", "id"),
@@ -263,14 +277,39 @@ function syncLayers(){
   const serIds = new Set(vis.map(s => s.series_id));
   const serOpts = st.seriesList.filter(s => serIds.has(s.id))
     .sort((a, b) => a.game_id.localeCompare(b.game_id) || (b.sort_order ?? -1) - (a.sort_order ?? -1) || a.name.localeCompare(b.name));
-  if (st.seriesId && !serOpts.some(s => String(s.id) === st.seriesId)) st.seriesId = "";
-  $("ser").innerHTML = '<option value="">All series</option>' + serOpts.map(s => '<option value="' + s.id + '"' + (String(s.id) === st.seriesId ? " selected" : "") + '>' + esc((st.game === "all" ? GNAME[s.game_id] + " · " : "") + s.name) + '</option>').join("");
-  const setOpts = vis.filter(s => !st.seriesId || String(s.series_id) === st.seriesId)
+  st.seriesIds = st.seriesIds.filter(id => serOpts.some(s => String(s.id) === id));
+  msel("ser", "Series", serOpts.map(s => [String(s.id), (st.game === "all" ? GNAME[s.game_id] + " · " : "") + s.name]), st.seriesIds,
+    v => { st.seriesIds = v; st.shown = STEP; render(true); });
+  const setOpts = vis.filter(s => !st.seriesIds.length || st.seriesIds.includes(String(s.series_id)))
     .sort((a, b) => String(b.release_date || "").localeCompare(String(a.release_date || "")) || a.name.localeCompare(b.name));
-  if (st.setId && !setOpts.some(s => String(s.id) === st.setId)) st.setId = "";
-  $("set").innerHTML = '<option value="">All sets (' + setOpts.length + ')</option>' + setOpts.map(s => '<option value="' + s.id + '"' + (String(s.id) === st.setId ? " selected" : "") + '>' + esc((st.game === "all" ? GNAME[s.game_id] + " · " : "") + s.name) + '</option>').join("");
-  const n = [st.game !== "all", st.lang !== "all", st.kind !== "all", !!st.seriesId, !!st.setId].filter(Boolean).length;
+  st.setIds = st.setIds.filter(id => setOpts.some(s => String(s.id) === id));
+  msel("set", "Sets", setOpts.map(s => [String(s.id), (st.game === "all" ? GNAME[s.game_id] + " · " : "") + s.name + (s.language === "JP" ? " (JP)" : "")]), st.setIds,
+    v => { st.setIds = v; st.shown = STEP; render(true); });
+  const n = [st.game !== "all", st.lang !== "all", st.kind !== "all", st.seriesIds.length > 0, st.setIds.length > 0, st.tab === "catalog" && st.owned !== "all"].filter(Boolean).length;
   $("fcount").innerHTML = n ? '<span class="badge">' + n + '</span>' : "";
+}
+// Multi-select dropdown with search: tick any number of options, apply with Done (or by clicking away)
+function msel(id, label, opts, sel, onChange){
+  const box = $(id); let cur = sel.slice();
+  const summary = sel.length === 0 ? "All " + label.toLowerCase() + " (" + opts.length + ")"
+    : sel.length === 1 ? ((opts.find(o => o[0] === sel[0]) || [0, "1 selected"])[1]) : sel.length + " " + label.toLowerCase() + " selected";
+  box.innerHTML = '<button type="button" class="mbtn" aria-expanded="false"><span>' + esc(summary) + '</span><span aria-hidden="true">▾</span></button>'
+    + '<div class="mpanel" hidden><input class="search msearch" type="search" placeholder="Search ' + label.toLowerCase() + '">'
+    + '<div class="mact"><button type="button" class="chip" data-m="all">Select shown</button><button type="button" class="chip" data-m="none">Clear</button><button type="button" class="chip mdone" data-m="done">Done</button></div>'
+    + '<div class="mlist">' + opts.map(o => '<label><input type="checkbox" value="' + esc(o[0]) + '"' + (sel.includes(o[0]) ? " checked" : "") + '><span>' + esc(o[1]) + '</span></label>').join("") + '</div></div>';
+  const btn = box.querySelector(".mbtn"), panel = box.querySelector(".mpanel"), search = box.querySelector(".msearch");
+  const same = () => cur.length === sel.length && cur.every(v => sel.includes(v));
+  const close = apply => { panel.hidden = true; btn.setAttribute("aria-expanded", "false"); document.removeEventListener("click", outside, true); if (apply && !same()) onChange(cur); };
+  const outside = e => { if (!box.contains(e.target)) close(true); };
+  btn.onclick = () => { if (panel.hidden) { panel.hidden = false; btn.setAttribute("aria-expanded", "true"); search.focus(); setTimeout(() => document.addEventListener("click", outside, true)); } else close(true); };
+  search.oninput = () => { const q = search.value.toLowerCase(); box.querySelectorAll(".mlist label").forEach(l => l.hidden = q && !l.textContent.toLowerCase().includes(q)); };
+  box.querySelectorAll(".mlist input").forEach(c => c.onchange = () => { cur = c.checked ? [...new Set(cur.concat(c.value))] : cur.filter(v => v !== c.value); });
+  box.querySelectorAll("[data-m]").forEach(b => b.onclick = () => {
+    if (b.dataset.m === "done") return close(true);
+    if (b.dataset.m === "none") { cur = []; box.querySelectorAll(".mlist input").forEach(c => c.checked = false); return; }
+    box.querySelectorAll(".mlist label:not([hidden]) input").forEach(c => { c.checked = true; cur = [...new Set(cur.concat(c.value))]; });
+  });
+  box.onkeydown = e => { if (e.key === "Escape") { e.stopPropagation(); close(false); btn.focus(); } };
 }
 
 // ---------- data ----------
@@ -302,8 +341,8 @@ function matchP(p){
   if (!p) return false;
   const q = st.q.toLowerCase(), s = setOf(p);
   return (st.game === "all" || p.game_id === st.game) && (st.lang === "all" || p.language === st.lang)
-    && (st.kind === "all" || p.kind === st.kind) && (!st.setId || String(p.set_id) === st.setId)
-    && (!st.seriesId || String(s.series_id) === st.seriesId)
+    && (st.kind === "all" || p.kind === st.kind) && (!st.setIds.length || st.setIds.includes(String(p.set_id)))
+    && (!st.seriesIds.length || st.seriesIds.includes(String(s.series_id)))
     && (!q || (p.name + " " + p.card_number).toLowerCase().includes(q));
 }
 function sortCol(rows){
@@ -333,7 +372,7 @@ function render(reset){
   $("friendsview").style.display = t === "friends" ? "" : "none";
   if (t === "carts") return renderCarts();
   if (t === "friends") return renderFriends();
-  ["g","l","k"].forEach(id => $(id)._sync()); syncLayers(); $("sort").value = st.sort;
+  ["g","l","k","o"].forEach(id => $(id)._sync()); $("o").style.display = t === "catalog" ? "" : "none"; syncLayers(); $("sort").value = st.sort;
   if (t === "invest") return renderInvest();
   st.tab === "collection" ? renderCollection() : renderCatalog(reset);
 }
@@ -371,7 +410,8 @@ async function renderCatalog(reset){
   if (st.game !== "all") q = q.eq("game_id", st.game);
   if (st.lang !== "all") q = q.eq("language", st.lang);
   if (st.kind !== "all") q = q.eq("kind", st.kind);
-  if (st.setId) q = q.eq("set_id", +st.setId); else if (st.seriesId) q = q.eq("series_id", +st.seriesId);
+  if (st.setIds.length) q = q.in("set_id", st.setIds.map(Number)); else if (st.seriesIds.length) q = q.in("series_id", st.seriesIds.map(Number));
+  if (st.owned !== "all") q = q.eq("owned", st.owned === "owned");
   if (st.q) { const t = st.q.replace(/[,()%*]/g, " "); q = q.or("name.ilike.%" + t + "%,card_number.ilike.%" + t + "%"); }
   const order = { "name":[["name",true]], "-name":[["name",false]], "value":[["name",true]], "set":[["set_name",true],["card_number",true]],
     "newest":[["release_date",false],["name",true]], "oldest":[["release_date",true],["name",true]], "added":[["created_at",false]], "qty":[["name",true]] }[st.sort];
@@ -382,7 +422,7 @@ async function renderCatalog(reset){
   st.cat = reset ? (res.data || []) : st.cat.concat(res.data || []); st.catCount = res.count || 0;
   $("sum").innerHTML = '<span><b>' + st.catCount.toLocaleString() + '</b> <span class="muted">products</span></span><span class="small muted">New sets and cards are added automatically</span>';
   $("grid").innerHTML = st.cat.length ? st.cat.map(p => tile(p, null)).join("")
-    : '<div class="empty">' + (st.setId ? "This set's cards are still being added by the automatic sync. Check back soon." : "Nothing matches these filters.") + '</div>';
+    : '<div class="empty">' + (st.setIds.length ? "These sets' cards are still being added by the automatic sync. Check back soon." : "Nothing matches these filters.") + '</div>';
   moreBtn(st.catCount); bind();
 }
 function moreBtn(total){
@@ -395,7 +435,7 @@ function bind(){
     const id = +el.dataset.id, cond = el.dataset.cond, grade = el.dataset.grade, p = findP(id);
     const sl = e.target.closest(".setlink"), act = e.target.closest("[data-act]");
     if (sl) { e.stopPropagation(); const s = st.setById.get(+sl.dataset.set);
-      if (s) { st.game = s.game_id; st.lang = "all"; st.seriesId = ""; st.setId = String(s.id); st.shown = STEP; render(true); scrollTo(0, 0); } return; }
+      if (s) { st.game = s.game_id; st.lang = "all"; st.seriesIds = []; st.setIds = [String(s.id)]; st.shown = STEP; render(true); scrollTo(0, 0); } return; }
     if (act) { e.stopPropagation();
       if (act.dataset.act === "cart") return openAddToCart(p, cond, grade);
       return adjust(p, cond, grade, act.dataset.act === "inc" ? 1 : -1);
@@ -481,7 +521,7 @@ function closeSheet(){ $("scrim").classList.remove("open"); $("sheet").classList
 // ---------- investment ----------
 const SLICE = { "pokemon":["#FFB547","#FFE0A8"], "one-piece":["#FF6B6B","#FFB8B8"], "dragon-ball":["#5FD39A","#B2EDCF"], "magic":["#7FB4FF","#C6DCFF"], "yugioh":["#C49BFF","#E4D4FF"] };
 const passSnap = r => (st.game === "all" || r.game_id === st.game) && (st.lang === "all" || r.language === st.lang) && (st.kind === "all" || r.kind === st.kind)
-  && (!st.setId || String(r.set_id) === st.setId) && (!st.seriesId || String((st.setById.get(r.set_id) || {}).series_id) === st.seriesId);
+  && (!st.setIds.length || st.setIds.includes(String(r.set_id))) && (!st.seriesIds.length || st.seriesIds.includes(String((st.setById.get(r.set_id) || {}).series_id)));
 function lineChart(pts){
   if (pts.length < 2) return '<div class="small muted" style="padding:24px 4px">Your value history starts building now: a point is added every night. Once eBay is connected, about 13 weeks of weekly history is filled in from past sales.</div>';
   const W = 640, H = 220, L = 8, R = 8, T = 14, B = 26, vals = pts.map(p => p.value);
@@ -553,7 +593,7 @@ async function loadRatios(){
   let q = sb.from("set_ratio_v").select("*").not("ratio", "is", null);
   if (st.game !== "all") q = q.eq("game_id", st.game);
   if (st.lang !== "all") q = q.eq("language", st.lang);
-  if (st.setId) q = q.eq("set_id", +st.setId); else if (st.seriesId) q = q.eq("series_id", +st.seriesId);
+  if (st.setIds.length) q = q.in("set_id", st.setIds.map(Number)); else if (st.seriesIds.length) q = q.in("series_id", st.seriesIds.map(Number));
   const { data, error } = await q.order("ratio", { ascending:true }).limit(150);
   const el = $("ratios"); if (!el) return;
   if (error) { el.textContent = "Couldn't load: " + error.message; return; }
@@ -562,7 +602,7 @@ async function loadRatios(){
     + data.map(r => '<tr><td><button class="setlink" data-setjump="' + r.set_id + '">' + esc(r.set_name) + '</button><div class="muted">' + esc(GNAME[r.game_id] || "") + (r.language === "JP" ? " · JP" : "") + '</div></td><td>' + money(+r.box_price)
       + '</td><td>' + money(+r.cards_value) + '</td><td><b class="' + (+r.ratio >= 1 ? "up" : "down") + '">' + (+r.ratio).toFixed(2) + '×</b></td><td>' + r.cards_priced + ' / ' + r.cards_total + '</td></tr>').join("") + '</tbody></table></div>';
   el.querySelectorAll("[data-setjump]").forEach(b => b.onclick = () => { const s = st.setById.get(+b.dataset.setjump); if (!s) return;
-    st.game = s.game_id; st.setId = String(s.id); st.seriesId = ""; st.tab = "catalog"; st.shown = STEP; render(true); scrollTo(0, 0); });
+    st.game = s.game_id; st.setIds = [String(s.id)]; st.seriesIds = []; st.tab = "catalog"; st.shown = STEP; render(true); scrollTo(0, 0); });
 }
 const PILL = { "Strong hype":"hot", "Positive":"pos", "Watch":"watch", "Mixed":"mixed", "Too early":"early" };
 async function loadUpcoming(){
