@@ -1,0 +1,12 @@
+{
+  "name": "pullfolio",
+  "private": true,
+  "description": "Test harness only. The app itself is the static index.html; nothing here is built or deployed.",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56.1",
+    "@supabase/supabase-js": "2.45.4"
+  }
+}
