@@ -47,7 +47,7 @@ async function setup(page, opts = {}){
   const db = tables(); if (opts.mutate) opts.mutate(db);
   const log = [];
   await page.clock.setFixedTime(NOW);
-  await page.addInitScript(([user, now]) => {
+  if (!opts.signedOut) await page.addInitScript(([user, now]) => {
     localStorage.setItem("sb-nkjxyelfekgfjlfxkkvk-auth-token", JSON.stringify({ access_token: "test", refresh_token: "test", token_type: "bearer",
       expires_in: 3600 * 24 * 365, expires_at: Math.floor(now / 1000) + 3600 * 24 * 365, user }));
   }, [USER, NOW]);
@@ -55,7 +55,8 @@ async function setup(page, opts = {}){
   await page.route(/cdn\.jsdelivr\.net\/npm\/@supabase\/supabase-js/, r => r.fulfill({ status: 200, contentType: "application/javascript", body: fs.readFileSync(SB_UMD) }));
   await page.route(ORIGIN + "/**", r => {
     const u = new URL(r.request().url());
-    let file = u.pathname === "/" ? "index.html" : u.pathname.slice(1);
+    const path0 = u.pathname.replace(/^\/tcg-collector(?=\/)/, "");   // also serve under the GitHub Pages path
+    let file = path0 === "/" ? "index.html" : path0.slice(1);
     const fp = path.join(ROOT, file);
     if (!fs.existsSync(fp)) return r.fulfill({ status: 404, body: "" });
     let body = fs.readFileSync(fp);
@@ -77,12 +78,16 @@ async function setup(page, opts = {}){
         const ps = db.catalog_v.filter(p => !args.p_sets || args.p_sets.includes(p.set_id));
         let value = 0, priced = 0;
         ps.forEach(p => { const r = db.price_v.find(x => x.product_id === p.id && x.condition === (args.p_cond || "NM") && (x.grade || "") === (args.p_grade || "")); if (r) { value += r.median; priced++; } });
-        return json({ value, priced, count: ps.length });
+        const owned = ps.filter(p => p.owned).length;
+        let owned_value = 0;
+        ps.filter(p => p.owned).forEach(p => { const r = db.price_v.find(x => x.product_id === p.id && x.condition === (args.p_cond || "NM") && (x.grade || "") === (args.p_grade || "")); if (r) owned_value += r.median; });
+        return json({ value, priced, count: ps.length, owned, owned_value });
       }
+      if (name === "set_completion") return json([]);
       return json(null);
     }
     const table = m[2];
-    if (method !== "GET") { log.push({ table, method }); return json([]); }
+    if (method !== "GET" && method !== "HEAD") { log.push({ table, method }); return json([]); }
     const params = [...u.searchParams.entries()];
     log.push({ table, params: Object.fromEntries(params) });
     let rows = (db[table] || []).slice();
@@ -95,6 +100,7 @@ async function setup(page, opts = {}){
     const off = +(u.searchParams.get("offset") || 0), lim = u.searchParams.get("limit");
     rows = rows.slice(off, lim != null ? off + +lim : undefined);
     const headers = (req.headers()["prefer"] || "").includes("count=") ? { "content-range": off + "-" + (off + rows.length - 1) + "/" + total } : {};
+    if (method === "HEAD") return r.fulfill({ status: 200, headers: { "access-control-allow-origin": "*", "access-control-expose-headers": "content-range", "content-range": "*/" + total } });
     return json(rows, 200, headers);
   });
   return { db, log };
@@ -102,7 +108,7 @@ async function setup(page, opts = {}){
 async function open(page, opts){
   const ctx = await setup(page, opts);
   await page.goto(ORIGIN + "/");
-  await page.locator("#sum b").first().waitFor();
+  await page.locator(".tile, #grid .empty").first().waitFor();
   return ctx;
 }
 async function tab(page, name){

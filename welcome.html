@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pullfolio · Track every card you own and every set you're chasing</title>
+<meta name="description" content="Pullfolio is a trading card collection tracker for Pokémon, One Piece, Dragon Ball, Magic and Yu-Gi-Oh: set completion, sold-price values, trading with friends, and import from any spreadsheet.">
+<meta name="theme-color" content="#14181D">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#14181D;--panel:#1B2128;--tile:#202833;--line:#2C3540;--ink:#EEF2F5;--muted:#93A1AE;--amber:#FFB547;--gold:#FFCB05;--good:#5FD39A;--amber-ink:#1A1206}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 "Manrope",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:var(--amber)}
+a:focus-visible,button:focus-visible{outline:2px solid var(--amber);outline-offset:3px;border-radius:6px}
+h1,h2,h3{font-family:"Sora",sans-serif;line-height:1.15;margin:0}
+.wrap{max-width:1080px;margin:0 auto;padding:0 22px}
+/* top bar */
+.top{position:sticky;top:0;z-index:10;background:rgba(20,24,29,.92);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.top .wrap{display:flex;align-items:center;gap:14px;height:62px}
+.brand{display:flex;align-items:center;gap:10px;font-family:"Sora",sans-serif;font-weight:800;font-size:19px;color:var(--ink);text-decoration:none}
+.brand img{width:30px;height:30px;border-radius:8px}
+.top nav{margin-left:auto;display:flex;gap:18px;align-items:center}
+.top nav a{color:var(--muted);text-decoration:none;font-weight:600;font-size:14.5px}
+.top nav a:hover{color:var(--ink)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:12px 20px;border-radius:12px;background:var(--amber);color:var(--amber-ink);font-weight:800;font-size:15px;text-decoration:none;border:0;cursor:pointer}
+.btn.ghost{background:none;color:var(--ink);border:1px solid var(--line)}
+.top .btn{padding:9px 15px;font-size:14px}
+@media (max-width:640px){.top nav a.hide-s{display:none}}
+/* hero: a binder page filling up */
+.hero{padding:64px 0 56px;border-bottom:1px solid var(--line)}
+.hero .wrap{display:grid;grid-template-columns:1.05fr .95fr;gap:48px;align-items:center}
+.hero h1{font-size:clamp(36px,5.4vw,60px);font-weight:800;letter-spacing:-1.4px}
+.hero p.lead{font-size:19px;color:var(--muted);max-width:30em;margin:18px 0 26px}
+.cta{display:flex;gap:10px;flex-wrap:wrap}
+.binder{position:relative;background:linear-gradient(160deg,#252D37,#1A2027);border:1px solid var(--line);border-radius:22px;padding:18px 18px 16px;box-shadow:0 30px 60px rgba(0,0,0,.45)}
+.binder::before{content:"";position:absolute;left:-9px;top:34px;bottom:34px;width:9px;background:repeating-linear-gradient(transparent 0 26px,#39434F 26px 40px);border-radius:4px 0 0 4px}
+.bhead{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px}
+.bhead b{font-family:"Sora",sans-serif;font-size:15px}
+.bhead span{color:var(--muted);font-size:13px}
+.slots{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.slot{aspect-ratio:63/88;border-radius:9px;border:1.5px dashed #3A4552;background:rgba(255,255,255,.02);position:relative;overflow:hidden}
+.slot.got{border:1.5px solid rgba(95,211,154,.55);background:linear-gradient(155deg,var(--c1),var(--c2))}
+.slot.got::after{content:"";position:absolute;inset:7% 9% 44%;border-radius:5px;background:rgba(255,255,255,.18)}
+.slot.got::before{content:"";position:absolute;left:9%;right:30%;bottom:16%;height:7%;border-radius:3px;background:rgba(255,255,255,.28)}
+.slot.gold{border:1.5px solid var(--gold);background:linear-gradient(135deg,#FFE58A,#FFCB05 45%,#C99700);box-shadow:0 0 22px rgba(255,203,5,.55)}
+.slot.gold::after{background:rgba(255,255,255,.38)}
+.bbar{margin-top:14px;height:8px;border-radius:5px;background:#2A333E;overflow:hidden}
+.bbar i{display:block;height:100%;width:0;background:var(--good);border-radius:5px;transition:width 1.6s cubic-bezier(.2,.8,.2,1)}
+.bfoot{display:flex;justify-content:space-between;margin-top:8px;font-size:13px;color:var(--muted)}
+.bfoot b{color:var(--good);font-family:"Sora",sans-serif}
+@media (prefers-reduced-motion:no-preference){.slot.pop{animation:pop .45s cubic-bezier(.2,.9,.3,1.4) both}}
+@keyframes pop{from{transform:scale(.6);opacity:0}to{transform:none;opacity:1}}
+@media (max-width:860px){.hero .wrap{grid-template-columns:1fr}.binder{max-width:420px}}
+/* sections */
+section{padding:72px 0;border-bottom:1px solid var(--line)}
+section h2{font-size:clamp(28px,3.6vw,38px);font-weight:800;letter-spacing:-.6px;max-width:20em}
+section .intro{color:var(--muted);font-size:17.5px;max-width:36em;margin:12px 0 0}
+.feature{display:grid;grid-template-columns:1fr 1fr;gap:44px;align-items:center;margin-top:52px}
+.feature.flip .shot{order:-1}
+.feature h3{font-size:22px;font-weight:700;margin-bottom:10px}
+.feature p{color:var(--muted);margin:0 0 12px;max-width:32em}
+.feature ul{margin:0;padding-left:18px;color:var(--muted)}
+.feature li{margin:4px 0}
+.feature li b{color:var(--ink);font-weight:700}
+@media (max-width:820px){.feature{grid-template-columns:1fr;gap:22px}.feature.flip .shot{order:0}}
+/* app-styled illustrations (drawn, not screenshots) */
+.shot{background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:18px;box-shadow:0 18px 40px rgba(0,0,0,.35)}
+.ui-title{display:flex;align-items:center;gap:10px;font-family:"Sora",sans-serif;font-weight:800;font-size:20px;margin-bottom:12px}
+.ui-ico{width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,var(--amber),#FF8A3D);display:grid;place-items:center;color:var(--amber-ink)}
+.ui-search{display:flex;gap:6px;margin-bottom:8px}
+.ui-search span{flex:1;padding:10px 12px;border-radius:11px;background:var(--tile);border:1px solid var(--line);color:var(--muted);font-size:14px}
+.ui-search em{font-style:normal;padding:10px 11px;border-radius:11px;border:1px solid var(--line);font-size:13px;font-weight:700}
+.ui-chips{display:flex;gap:6px;margin-bottom:12px}
+.ui-chips span{flex:1;text-align:center;padding:8px;border-radius:999px;border:1px solid var(--good);background:rgba(95,211,154,.12);font-size:13px;font-weight:700}
+.ui-chips span::before{content:"✓ ";color:var(--good)}
+.ui-sum{display:flex;justify-content:space-between;align-items:baseline;font-size:14px;color:var(--muted)}
+.ui-sum b{font-family:"Sora",sans-serif;font-size:19px;color:var(--ink)}
+.ui-sum strong{color:var(--good);font-family:"Sora",sans-serif}
+.ui-bar{height:6px;border-radius:4px;background:#2A333E;margin:6px 0 12px;overflow:hidden}
+.ui-bar i{display:block;height:100%;background:var(--good)}
+.ui-bar.done i{background:linear-gradient(90deg,var(--gold),#FFE58A)}
+.ui-set{display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:11px;background:#1F262E;border:1px solid var(--line);margin-bottom:8px}
+.ui-set.done{border-color:rgba(255,203,5,.55)}
+.ui-set .nm{flex:1;font-weight:800;font-size:14px}
+.ui-set .ct{font-size:12px;color:var(--muted);text-align:right;min-width:86px}
+.ui-set .ct .ui-bar{margin:4px 0 0}
+.ui-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}
+.ui-tile{aspect-ratio:63/96;border-radius:9px;background:var(--tile);border:1px solid var(--line);position:relative;overflow:hidden}
+.ui-tile::before{content:"";position:absolute;left:0;right:0;top:0;height:3px;background:var(--g)}
+.ui-tile.own{border-color:rgba(95,211,154,.55);background:linear-gradient(rgba(95,211,154,.12),rgba(95,211,154,.12)),var(--tile)}
+.ui-tile i{position:absolute;inset:12% 14% 38%;border-radius:5px;background:linear-gradient(155deg,var(--c1),var(--c2))}
+.ui-tile s{position:absolute;left:12%;right:30%;bottom:20%;height:5%;background:#3A4552;border-radius:3px;text-decoration:none}
+.ui-row{display:flex;justify-content:space-between;align-items:center;padding:11px 0;border-bottom:1px solid var(--line);font-size:14.5px}
+.ui-row:last-child{border-bottom:0}
+.ui-row span{color:var(--muted)}
+.ui-row b{font-family:"Sora",sans-serif}
+.meter{height:12px;border-radius:7px;background:linear-gradient(90deg,#FF6B6B,var(--amber) 35%,var(--good) 50%,var(--amber) 65%,#FF6B6B);position:relative;margin:14px 0 6px}
+.meter i{position:absolute;top:-5px;left:46%;width:4px;height:22px;border-radius:2px;background:var(--ink);box-shadow:0 0 0 3px var(--panel)}
+.ui-q{display:flex;flex-wrap:wrap;gap:6px}
+.ui-q span{padding:7px 11px;border-radius:999px;border:1px solid var(--line);font-size:13px;font-weight:600}
+.ui-q span.on{border-color:var(--amber);background:rgba(255,181,71,.12)}
+.ui-file{display:flex;gap:10px;align-items:center;padding:12px;border-radius:12px;border:1px dashed #3A4552;margin-bottom:10px;font-size:14px}
+.ui-file b{font-family:"Sora",sans-serif}
+.ui-stats{display:flex;gap:6px;flex-wrap:wrap}
+.ui-stats span{padding:4px 10px;border-radius:999px;border:1px solid var(--line);font-size:12.5px;font-weight:700}
+/* games strip */
+.games{display:flex;flex-wrap:wrap;gap:10px;margin-top:22px}
+.games span{padding:9px 15px;border-radius:12px;background:var(--panel);border:1px solid var(--line);font-weight:700;font-size:14.5px;border-top:3px solid var(--g)}
+/* setup steps (a real sequence) */
+.steps{list-style:none;padding:0;margin:40px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;counter-reset:s}
+.steps li{counter-increment:s;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:20px 18px 18px}
+.steps li::before{content:counter(s);display:grid;place-items:center;width:32px;height:32px;border-radius:50%;background:var(--amber);color:var(--amber-ink);font-family:"Sora",sans-serif;font-weight:800;margin-bottom:12px}
+.steps h3{font-size:17px;margin-bottom:6px}
+.steps p{margin:0;color:var(--muted);font-size:15px}
+.note{margin-top:22px;padding:14px 16px;border-radius:12px;border:1px solid var(--line);background:var(--panel);color:var(--muted);font-size:15px;max-width:46em}
+/* sources */
+.src{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px;margin-top:30px}
+.src div{padding:16px;border-radius:14px;border:1px solid var(--line)}
+.src b{display:block;font-family:"Sora",sans-serif;margin-bottom:4px}
+.src p{margin:0;color:var(--muted);font-size:14.5px}
+footer{padding:36px 0 calc(48px + env(safe-area-inset-bottom,0px));color:var(--muted);font-size:14px}
+footer .wrap{display:flex;flex-wrap:wrap;gap:14px 24px;align-items:center}
+footer nav{display:flex;gap:18px;flex-wrap:wrap}
+footer a{color:var(--ink);text-decoration:none;font-weight:600}
+footer p{flex-basis:100%;margin:6px 0 0;max-width:60em}
+@media (prefers-reduced-motion:reduce){.bbar i{transition:none}}
+/* account */
+.acctform{max-width:560px;margin-top:22px}
+.acctform label{display:block;font-weight:700;margin-bottom:8px}
+.arow{display:flex;gap:8px;flex-wrap:wrap}
+.arow input{flex:1;min-width:230px;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--tile);color:var(--ink);font:inherit}
+.arow input:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+.fine{color:var(--muted);font-size:14px;margin:12px 0 0}
+</style>
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="welcome.html"><img src="icon-192.png" alt="">Pullfolio</a>
+  <nav aria-label="Main">
+    <a class="hide-s" href="#features">Features</a><a class="hide-s" href="#setup">Set up</a><a class="hide-s" href="#sources">Data</a>
+    <a class="btn" id="navacct" href="#account">Sign in</a>
+  </nav>
+</div></header>
+
+<main>
+<div class="hero"><div class="wrap">
+  <div>
+    <h1>Every card you own, every set you're chasing.</h1>
+    <p class="lead">Pullfolio tracks your trading card collection across five games, shows how close each set is to complete, values it by what cards actually sell for, and makes trading with friends fair.</p>
+    <div class="cta"><a class="btn" id="herocta" href="#account">Sign in with email</a><a class="btn ghost" href="#setup">How to set it up</a></div>
+  </div>
+  <div class="binder" aria-label="Illustration: a binder page filling up as a set is completed" role="img">
+    <div class="bhead"><b>Your set, page 1</b><span id="bcount">0 / 9</span></div>
+    <div class="slots" id="slots"></div>
+    <div class="bbar"><i id="bbar"></i></div>
+    <div class="bfoot"><span>Set completion</span><b id="bpct">0%</b></div>
+  </div>
+</div></div>
+
+<section id="features"><div class="wrap">
+  <h2>Built around how collectors actually work</h2>
+  <p class="intro">One catalog of about 200,000 cards and sealed products, your collection on top of it, and every view filtered the way you'd sort a binder.</p>
+  <div class="games" aria-label="Games covered">
+    <span style="--g:#FFCB05">Pokémon</span><span style="--g:#FF6B6B">One Piece</span><span style="--g:#FF9F43">Dragon Ball</span><span style="--g:#7FB4FF">Magic: The Gathering</span><span style="--g:#C49BFF">Yu-Gi-Oh!</span>
+  </div>
+
+  <div class="feature">
+    <div>
+      <h3>Know exactly what's missing</h3>
+      <p>Every game, series and set shows owned out of total, a percentage and a progress bar. Finish a set and its logo lights up gold.</p>
+      <ul>
+        <li><b>Owned / Not owned</b> chips to see what you have or what you still need</li>
+        <li><b>Sticky set headers</b> that change as you scroll from set to set</li>
+        <li><b>Filters by logo</b> for games, series, sets, card type, language and quality</li>
+        <li><b>Search suggestions</b> with the card picture as you type</li>
+      </ul>
+    </div>
+    <div class="shot" aria-hidden="true">
+      <div class="ui-title"><span class="ui-ico"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></span>Catalog</div>
+      <div class="ui-search"><span>Search name or number</span><em>Filter</em><em>Sort</em></div>
+      <div class="ui-chips"><span>Owned</span><span>Not owned</span></div>
+      <div class="ui-sum"><span><b>156</b> / 180 owned</span><strong>86%</strong></div>
+      <div class="ui-bar"><i style="width:86%"></i></div>
+      <div class="ui-set done"><span class="nm">Your finished set</span><span class="ct">✓ 165/165<div class="ui-bar done"><i style="width:100%"></i></div></span></div>
+      <div class="ui-grid">
+        <span class="ui-tile own" style="--g:#FFCB05;--c1:#4D7FBF;--c2:#2D4E7E"><i></i><s></s></span>
+        <span class="ui-tile own" style="--g:#FFCB05;--c1:#C7553F;--c2:#7E2D22"><i></i><s></s></span>
+        <span class="ui-tile" style="--g:#FFCB05;--c1:#2F3A46;--c2:#232B34"><i></i><s></s></span>
+        <span class="ui-tile own" style="--g:#FFCB05;--c1:#5BAE6E;--c2:#2F6B3E"><i></i><s></s></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="feature flip">
+    <div>
+      <h3>Valued by what actually sells</h3>
+      <p>Values come from recent eBay sold listings in your region, not asking prices, with outliers screened out. They follow the quality you pick, from Near Mint down to Damaged, or a PSA, BGS or CGC grade.</p>
+      <ul>
+        <li><b>12 currencies</b> using European Central Bank reference rates</li>
+        <li><b>Portfolio view</b> with value over time, cost basis and profit</li>
+        <li><b>Price alerts</b> and a cross-region price comparison</li>
+      </ul>
+      <p class="small" style="font-size:14px">Sold-price values switch on once eBay approves Pullfolio's sold-data access.</p>
+    </div>
+    <div class="shot" aria-hidden="true">
+      <div class="ui-q" style="margin-bottom:14px"><span>Raw (as owned)</span><span class="on">Near Mint</span><span>Lightly Played</span><span>PSA 10</span><span>BGS 9.5</span></div>
+      <div class="ui-row"><span>Median sold, last 90 days</span><b>$184.00</b></div>
+      <div class="ui-row"><span>Sales counted</span><b>23</b></div>
+      <div class="ui-row"><span>Outliers excluded</span><b>2</b></div>
+      <div class="ui-row"><span>Shown in</span><b>AUD</b></div>
+    </div>
+  </div>
+
+  <div class="feature">
+    <div>
+      <h3>Trade with friends, fairly</h3>
+      <p>Build a cart from both sides of a trade and the fairness meter shows whether it's even. Payments always stay between you and your friend, outside the app.</p>
+      <ul>
+        <li><b>Wishlists</b> visible to you and accepted friends, with matches</li>
+        <li><b>Swap builder</b> that suggests a balanced trade</li>
+        <li><b>Vendor page and QR code</b> for cards you're selling</li>
+        <li><b>Shareable binder link</b> and trade ratings</li>
+      </ul>
+    </div>
+    <div class="shot" aria-hidden="true">
+      <div class="ui-row"><span>You give</span><b>$212.00</b></div>
+      <div class="ui-row"><span>You get</span><b>$205.50</b></div>
+      <div class="meter"><i></i></div>
+      <div class="ui-sum"><span>Fair trade</span><strong>within 3%</strong></div>
+    </div>
+  </div>
+
+  <div class="feature flip">
+    <div>
+      <h3>Bring your spreadsheet, take your data</h3>
+      <p>Import from Excel, CSV or Numbers in almost any layout. Pullfolio finds the columns, reads quantities, conditions, grades, languages, prices and dates, matches every row to the catalog, and asks you about anything uncertain.</p>
+      <ul>
+        <li><b>Export</b> your filtered collection to Excel, Word or PDF</li>
+        <li><b>Add or remove</b> copies by condition or grade from any card</li>
+        <li><b>Light or dark</b>, large or small tiles, swipe between tabs</li>
+      </ul>
+    </div>
+    <div class="shot" aria-hidden="true">
+      <div class="ui-file"><b>my-collection.xlsx</b><span style="color:var(--muted)">1,248 rows</span></div>
+      <div class="ui-stats"><span style="color:var(--good)">1,192 matched</span><span style="color:var(--amber)">41 to check</span><span style="color:#FF6B6B">15 not found</span></div>
+      <div class="ui-row" style="margin-top:8px"><span>Charizard · Base Set · 4/102</span><b style="color:var(--good)">Matched</b></div>
+      <div class="ui-row"><span>Shanks · OP01-120 · PSA 10</span><b style="color:var(--good)">Matched</b></div>
+    </div>
+  </div>
+</div></section>
+
+<section id="setup"><div class="wrap">
+  <h2>Set up in five minutes</h2>
+  <p class="intro">Pullfolio runs in your browser and installs to your home screen like an app. There's nothing to download from an app store.</p>
+  <ol class="steps">
+    <li><h3>Open Pullfolio</h3><p>Go to pullfolio.pages.dev on your phone or computer.</p></li>
+    <li><h3>Sign in with email</h3><p>Enter your email and tap the link we send. No password to remember. Use the newest link if you request more than one.</p></li>
+    <li><h3>Add to your home screen</h3><p>iPhone: tap Share, then Add to Home Screen. Android: tap the menu, then Install app or Add to Home screen.</p></li>
+    <li><h3>Add your cards</h3><p>Import a spreadsheet from Settings, or tap + on any card in the Catalog.</p></li>
+    <li><h3>Make it yours</h3><p>In Settings choose your region, currency, light or dark mode, and whether eBay links open in the app or your browser.</p></li>
+  </ol>
+  <p class="note">To update after a new version is released, close Pullfolio fully and open it again.</p>
+</div></section>
+
+<section id="account"><div class="wrap">
+  <div id="acct-out">
+    <h2>Sign in</h2>
+    <p class="intro">Enter your email and we'll send you a one-tap sign-in link. There's no password, and the same link creates your account the first time.</p>
+    <form id="acctform" class="acctform"><label for="acctemail">Email address</label>
+      <div class="arow"><input id="acctemail" type="email" autocomplete="email" required placeholder="you@example.com"><button class="btn" type="submit">Send sign-in link</button></div>
+      <p class="fine">By signing in you agree to the <a href="terms.html">Terms of use</a> and <a href="privacy.html">Privacy policy</a>.</p></form>
+  </div>
+  <div id="acct-in" hidden>
+    <h2>You're signed in</h2>
+    <p class="intro">Signed in as <b id="acctwho" style="color:var(--ink)">your account</b>.</p>
+    <div class="cta" style="margin-top:22px"><a class="btn" href="./">Open Pullfolio</a><a class="btn ghost" href="./?signout">Sign out</a><a class="btn ghost" href="./?signout=all">Sign out of all devices</a></div>
+  </div>
+</div></section>
+
+<section id="sources"><div class="wrap">
+  <h2>Where the data comes from</h2>
+  <p class="intro">Pullfolio brings together open card databases and official sources, and credits each one.</p>
+  <div class="src">
+    <div><b>Card catalogs</b><p>TCGdex, the Pokémon TCG API and Scryfall, plus community card databases for One Piece, Dragon Ball and Yu-Gi-Oh.</p></div>
+    <div><b>Sold prices</b><p>eBay's official APIs, filtered to your region. Pullfolio is not affiliated with eBay.</p></div>
+    <div><b>Exchange rates</b><p>European Central Bank reference rates via Frankfurter, checked hourly.</p></div>
+    <div><b>Card images and logos</b><p>Belong to their publishers and are shown only to identify cards and sets. See <a href="credits.html">Credits</a>.</p></div>
+  </div>
+</div></section>
+</main>
+
+<footer><div class="wrap">
+  <a class="brand" href="welcome.html" style="font-size:16px"><img src="icon-192.png" alt="" style="width:24px;height:24px">Pullfolio</a>
+  <nav aria-label="Legal"><a href="privacy.html">Privacy</a><a href="terms.html">Terms of use</a><a href="credits.html">Credits</a><a id="footacct" href="#account">Sign in</a></nav>
+  <p>Pullfolio is an independent collector's tool. It is not affiliated with, endorsed by or sponsored by The Pokémon Company, Nintendo, Creatures, GAME FREAK, Bandai, Wizards of the Coast, Konami, eBay, PSA, Beckett or CGC. All names, logos and card images belong to their owners.</p>
+</div></footer>
+
+<script>
+(function(){
+  const slots = document.getElementById("slots"), fill = [0,1,3,4,5,7,8,2,6], cols = [["#4D7FBF","#2D4E7E"],["#C7553F","#7E2D22"],["#5BAE6E","#2F6B3E"],["#8F6BC8","#553A86"],["#D9A441","#8A6420"],["#4FB2B8","#2B6E73"],["#C26393","#7A3557"],["#7D8EA3","#4A5868"],["#E07A4F","#8F3F22"]];
+  for (let i = 0; i < 9; i++) { const d = document.createElement("span"); d.className = "slot"; slots.appendChild(d); }
+  const els = [...slots.children], still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const set = n => { fill.slice(0, n).forEach((k, j) => { const e = els[k]; if (e.classList.contains("got")) return; e.classList.add("got", "pop"); e.style.setProperty("--c1", cols[k][0]); e.style.setProperty("--c2", cols[k][1]); if (j === 8) { e.classList.add("gold"); } });
+    document.getElementById("bcount").textContent = n + " / 9"; document.getElementById("bpct").textContent = Math.round(n / 9 * 100) + "%"; document.getElementById("bbar").style.width = (n / 9 * 100) + "%";
+    if (n === 9) { const b = document.getElementById("bbar"); b.style.background = "linear-gradient(90deg,#FFCB05,#FFE58A)"; document.getElementById("bpct").textContent = "✓ 100%"; document.getElementById("bpct").style.color = "#FFCB05"; } };
+  if (still) set(9); else { let n = 0; const t = setInterval(() => { set(++n); if (n >= 9) clearInterval(t); }, 260); }
+})();
+(function(){
+  let s = null; try { s = JSON.parse(localStorage.getItem("sb-nkjxyelfekgfjlfxkkvk-auth-token") || "null"); } catch (e) {}
+  const signedIn = !!(s && (s.refresh_token || (s.expires_at && s.expires_at * 1000 > Date.now())));
+  if (signedIn) {
+    document.getElementById("acct-out").hidden = true; document.getElementById("acct-in").hidden = false;
+    if (s.user && s.user.email) document.getElementById("acctwho").textContent = s.user.email;
+    [["navacct", "Open Pullfolio"], ["herocta", "Open Pullfolio"], ["footacct", "Open Pullfolio"]].forEach(([id, t]) => { const a = document.getElementById(id); a.textContent = t; a.href = "./"; });
+  }
+  document.getElementById("acctform").addEventListener("submit", e => { e.preventDefault(); const v = document.getElementById("acctemail").value.trim(); if (!v) return;
+    try { sessionStorage.setItem("pf.signinEmail", v); } catch (err) {} location.href = "./?signin"; });
+})();
+</script>
+</body>
+</html>
