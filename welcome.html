@@ -279,7 +279,7 @@ footer p{flex-basis:100%;margin:6px 0 0;max-width:60em}
   <div id="acct-in" hidden>
     <h2>You're signed in</h2>
     <p class="intro">Signed in as <b id="acctwho" style="color:var(--ink)">your account</b>.</p>
-    <div class="cta" style="margin-top:22px"><a class="btn" href="/">Open Pullfolio</a><a class="btn ghost" href="/?signout">Sign out</a><a class="btn ghost" href="/?signout=all">Sign out of all devices</a></div>
+    <div class="cta" style="margin-top:22px"><a class="btn" href="./">Open Pullfolio</a><a class="btn ghost" href="./?signout">Sign out</a><a class="btn ghost" href="./?signout=all">Sign out of all devices</a></div>
   </div>
 </div></section>
 
@@ -317,10 +317,10 @@ footer p{flex-basis:100%;margin:6px 0 0;max-width:60em}
   if (signedIn) {
     document.getElementById("acct-out").hidden = true; document.getElementById("acct-in").hidden = false;
     if (s.user && s.user.email) document.getElementById("acctwho").textContent = s.user.email;
-    [["navacct", "Open Pullfolio"], ["herocta", "Open Pullfolio"], ["footacct", "Open Pullfolio"]].forEach(([id, t]) => { const a = document.getElementById(id); a.textContent = t; a.href = "/"; });
+    [["navacct", "Open Pullfolio"], ["herocta", "Open Pullfolio"], ["footacct", "Open Pullfolio"]].forEach(([id, t]) => { const a = document.getElementById(id); a.textContent = t; a.href = "./"; });
   }
   document.getElementById("acctform").addEventListener("submit", e => { e.preventDefault(); const v = document.getElementById("acctemail").value.trim(); if (!v) return;
-    try { sessionStorage.setItem("pf.signinEmail", v); } catch (err) {} location.href = "/?signin"; });
+    try { sessionStorage.setItem("pf.signinEmail", v); } catch (err) {} location.href = "./?signin"; });
 })();
 </script>
 </body>

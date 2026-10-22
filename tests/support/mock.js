@@ -47,7 +47,7 @@ async function setup(page, opts = {}){
   const db = tables(); if (opts.mutate) opts.mutate(db);
   const log = [];
   await page.clock.setFixedTime(NOW);
-  await page.addInitScript(([user, now]) => {
+  if (!opts.signedOut) await page.addInitScript(([user, now]) => {
     localStorage.setItem("sb-nkjxyelfekgfjlfxkkvk-auth-token", JSON.stringify({ access_token: "test", refresh_token: "test", token_type: "bearer",
       expires_in: 3600 * 24 * 365, expires_at: Math.floor(now / 1000) + 3600 * 24 * 365, user }));
   }, [USER, NOW]);
@@ -55,7 +55,8 @@ async function setup(page, opts = {}){
   await page.route(/cdn\.jsdelivr\.net\/npm\/@supabase\/supabase-js/, r => r.fulfill({ status: 200, contentType: "application/javascript", body: fs.readFileSync(SB_UMD) }));
   await page.route(ORIGIN + "/**", r => {
     const u = new URL(r.request().url());
-    let file = u.pathname === "/" ? "index.html" : u.pathname.slice(1);
+    const path0 = u.pathname.replace(/^\/tcg-collector(?=\/)/, "");   // also serve under the GitHub Pages path
+    let file = path0 === "/" ? "index.html" : path0.slice(1);
     const fp = path.join(ROOT, file);
     if (!fs.existsSync(fp)) return r.fulfill({ status: 404, body: "" });
     let body = fs.readFileSync(fp);
