@@ -7,6 +7,13 @@ name: Deploy to Cloudflare Pages
 on:
   push:
     branches: [main]
+    # only when something that is actually published changes (not tests, package files or docs)
+    paths:
+      - "*.html"
+      - "sw.js"
+      - "manifest.webmanifest"
+      - "icon-*.png"
+      - ".github/workflows/deploy-cloudflare.yml"
   workflow_dispatch:
 
 permissions:
@@ -24,6 +31,14 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          sparse-checkout: |
+            /*.html
+            /sw.js
+            /manifest.webmanifest
+            /icon-*.png
+          sparse-checkout-cone-mode: false
 
       # Only the site itself; tests, package files and workflows are not published.
       - name: Collect site files
