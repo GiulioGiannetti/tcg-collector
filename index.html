@@ -196,6 +196,8 @@ body.selecting .wrap{padding-bottom:140px}
   .mlist{max-height:none;flex:1;min-height:0}
   .k-card .art{aspect-ratio:133/50}
 }
+.askb{display:inline-block;font-style:italic;font-weight:800;font-size:9.5px;letter-spacing:.06em;padding:0 4px;margin-right:4px;border-radius:5px;border:1px dashed var(--muted);color:var(--muted);vertical-align:1px}
+.askv,.price .v.askv{color:var(--muted);font-style:italic}
 </style>
 </head>
 <body>
@@ -207,6 +209,9 @@ body.selecting .wrap{padding-bottom:140px}
 // Publishable key is safe in browser code; data is protected by row-level security.
 const SUPABASE_URL = "https://nkjxyelfekgfjlfxkkvk.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_juI9-HkffckYydt9j7o6TA_Vda592lA";
+// Temporary: until eBay sold data is available, show eBay asking prices (ask_price_v) wherever there is no sold price.
+// Set to false to switch the whole fallback off.
+const PRICE_FALLBACK_ASKING = true;
 
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const GAMES = [["pokemon","Pokémon"],["one-piece","One Piece"],["dragon-ball","Dragon Ball"],["magic","Magic"],["yugioh","Yu-Gi-Oh!"]];
@@ -219,7 +224,7 @@ const money = v => v == null || isNaN(v) ? "—" : AUD.format(v);
 const LOGO = '<svg viewBox="0 0 32 32" aria-hidden="true"><rect x="4" y="3" width="18" height="25" rx="3" fill="#27313B"/><rect x="10" y="5" width="18" height="25" rx="3" fill="#FFB547"/><path d="M14 13h10M14 17h10M14 21h6" stroke="#1B1406" stroke-width="2.2" stroke-linecap="round"/></svg>';
 const CART_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4h2l2.4 11.2a2 2 0 0 0 2 1.6h7.7a2 2 0 0 0 2-1.5L21 8H6"/><circle cx="10" cy="20" r="1.3"/><circle cx="17" cy="20" r="1.3"/></svg>';
 const st = { tab:"collection", games:[], lang:"all", kind:"all", seriesIds:[], setIds:[], specials:[], owned:"all", quality:"", q:"", sort:"name", shown:48, sel:new Map(), selecting:false,
-             sets:[], seriesList:[], col:[], cat:[], catCount:0, drawer:false, setById:new Map(), prices:new Map(),
+             sets:[], seriesList:[], col:[], cat:[], catCount:0, drawer:false, setById:new Map(), prices:new Map(), asks:new Map(), askLoaded:new Set(),
              carts:[], cartId:null, cartItems:[] };
 const STEP = 48;
 try { st.cartId = +localStorage.getItem("activeCart") || null; } catch (e) {}
@@ -358,11 +363,13 @@ async function loadCollection(){
     if (error || !data || !data.length) break;
     st.col.push(...data); if (data.length < 1000) break; from += 1000;
   }
+  await loadAsks(st.col.map(c => c.products && c.products.id));
 }
 async function refreshProductLines(pid){
   st.snaps = null;
   const { data } = await sb.from("collection_items").select(LINE_COLS).eq("product_id", pid);
   st.col = st.col.filter(c => !(c.products && c.products.id === pid)).concat(data || []);
+  await loadAsks([pid]);
 }
 // eBay-only pricing: exact condition + grade; sealed products fall back to the "Sealed" price.
 function priceOf(p, cond, grade){
@@ -382,6 +389,46 @@ function valueOf(p, cond, grade){
   if (!p) return null;
   if (p.kind === "sealed" || !st.quality) return priceOf(p, cond || "NM", grade || "");
   return isGrade(st.quality) ? gradePrice(p, st.quality) : priceOf(p, st.quality, "");
+}
+// ---------- asking prices (temporary fallback, see PRICE_FALLBACK_ASKING) ----------
+const ASK_TIP = "Asking price. Based on current eBay listings, not completed sales. Will switch to sold prices when available.";
+const ASK_COLS = "product_id,condition,grade,median_ask_aud,low_ask_aud,listings,enough_listings,updated_at";
+const askKey = r => r.product_id + "|" + r.condition + "|" + (r.grade || "");
+// fetch ask_price_v for these products in batches (once per product)
+async function loadAsks(ids){
+  if (!PRICE_FALLBACK_ASKING) return;
+  const todo = [...new Set(ids)].filter(id => id != null && !st.askLoaded.has(id));
+  for (let i = 0; i < todo.length; i += 200) {
+    const chunk = todo.slice(i, i + 200);
+    const { data, error } = await sb.from("ask_price_v").select(ASK_COLS).eq("market", "AU").in("product_id", chunk);
+    if (error) continue;
+    chunk.forEach(id => st.askLoaded.add(id));
+    (data || []).forEach(r => st.asks.set(askKey(r), r));
+  }
+}
+// asking row for an item: graded copies match on grade, raw copies on their exact condition, sealed on "Sealed"
+function askOf(p, cond, grade){
+  if (!PRICE_FALLBACK_ASKING || !p) return null;
+  if (p.kind === "sealed") return st.asks.get(p.id + "|" + (cond || "NM") + "|") || st.asks.get(p.id + "|Sealed|") || null;
+  if (!grade) return st.asks.get(p.id + "|" + (cond || "NM") + "|") || null;
+  let best = null; st.asks.forEach((r, k) => { if (k.startsWith(p.id + "|") && r.grade === grade && (best == null || r.listings > best.listings)) best = r; });
+  return best;
+}
+// same choice of quality as valueOf
+function askFor(p, cond, grade){
+  if (!p) return null;
+  if (p.kind === "sealed" || !st.quality) return askOf(p, cond || "NM", grade || "");
+  return isGrade(st.quality) ? askOf(p, "NM", st.quality) : askOf(p, st.quality, "");
+}
+// thin data (under 4 listings) uses the lowest ask, shown as "From $X"
+const askNum = r => r.enough_listings ? +r.median_ask_aud : +r.low_ask_aud;
+const askText = (r, each) => r.enough_listings ? money(+r.median_ask_aud) + (each || "")
+  : "From " + money(+r.low_ask_aud) + (each || "") + " · " + r.listings + " listing" + (+r.listings === 1 ? "" : "s");
+const ASK_BADGE = '<span class="askb">ASK</span>';
+const askHTML = (r, each) => '<span class="askv" title="' + esc(ASK_TIP) + '">' + ASK_BADGE + askText(r, each) + '</span>';
+function ago(ts){
+  const m = Math.max(0, Math.round((Date.now() - new Date(ts).getTime()) / 60000));
+  return m < 60 ? m + " min ago" : m < 48 * 60 ? Math.round(m / 60) + " h ago" : Math.round(m / 1440) + " d ago";
 }
 const qualityLabel = () => st.quality ? (QUALITIES.find(q => q[0] === st.quality) || [0, st.quality])[1] : "raw";
 const ownedQty = (pid, cond, grade) => st.col.filter(c => c.products && c.products.id === pid && (cond == null || (c.condition === cond && (c.grade || "") === (grade || "")))).reduce((n, c) => n + c.quantity, 0);
@@ -431,7 +478,8 @@ function tile(p, line){
   const s = setOf(p);
   const cond = line ? line.condition : "NM", grade = line ? (line.grade || "") : "";
   const qty = line ? line.quantity : ownedQty(p.id, "NM", "");
-  const price = valueOf(p, cond, grade);
+  const price = valueOf(p, cond, grade), ask = price == null ? askFor(p, cond, grade) : null;
+  const qtag = st.quality && p.kind !== "sealed" ? ' <span class="small muted">' + esc(st.quality) + '</span>' : "";
   const img = p.image_url ? '<img loading="lazy" alt="" src="' + esc(p.image_url) + '">' : '<div class="ph">' + (p.kind === "sealed" ? "Sealed product" : "Image coming") + '</div>';
   const flags = (p.language === "JP" ? '<span class="flag jp">JP</span>' : "") + (p.kind === "sealed" ? '<span class="flag sealed">SEALED</span>' : "");
   const meta = [p.rarity, p.card_number].filter(Boolean).join(" · ");
@@ -442,15 +490,19 @@ function tile(p, line){
     + ((line || totalOwned) ? '<span class="qty">×' + (line ? line.quantity : totalOwned) + '</span>' : "") + '</div><div class="body"><div class="name">' + esc(p.name) + '</div>'
     + '<button class="setlink" data-set="' + p.set_id + '">' + esc(s.name || "") + '</button>'
     + (meta ? '<div class="meta">' + esc(meta) + '</div>' : "") + (condTxt ? '<div class="cond">' + esc(condTxt) + '</div>' : "")
-    + '<div class="price"><span class="v' + (price != null ? ' ok' : '') + '">' + (price != null ? money(price) + (st.quality && p.kind !== "sealed" ? ' <span class="small muted">' + esc(st.quality) + '</span>' : "") : "No sold data yet") + '</span></div>'
+    + '<div class="price">' + (price != null ? '<span class="v ok">' + money(price) + qtag
+      : ask ? '<span class="v askv" title="' + esc(ASK_TIP) + '">' + ASK_BADGE + askText(ask) + qtag
+      : '<span class="v">' + (PRICE_FALLBACK_ASKING ? "No price yet" : "No sold data yet")) + '</span></div>'
     + '<div class="ctl"><button class="q" data-act="dec" aria-label="Remove one from collection">−</button><span class="qn">' + qty + '</span><button class="q" data-act="inc" aria-label="Add one to collection">+</button>'
     + '<button class="cartbtn" data-act="cart" aria-label="Add to cart" title="Add to cart">' + CART_ICON + '</button></div></div></article>';
 }
 function renderCollection(){
   const rows = sortCol(st.col.filter(c => matchP(c.products)));
-  let items = 0, value = 0, priced = 0;
-  rows.forEach(c => { items += c.quantity; const pr = valueOf(c.products, c.condition, c.grade); if (pr != null) { value += pr * c.quantity; priced++; } });
-  $("sum").innerHTML = '<span><b>' + items.toLocaleString() + '</b> <span class="muted">items · ' + rows.length.toLocaleString() + ' lines</span> · <b>' + money(value) + '</b> <span class="muted">' + qualityLabel() + ' value</span></span>'
+  let items = 0, value = 0, priced = 0, askValue = 0, unpriced = 0;
+  rows.forEach(c => { items += c.quantity; const pr = valueOf(c.products, c.condition, c.grade); if (pr != null) { value += pr * c.quantity; priced++; return; }
+    const a = askFor(c.products, c.condition, c.grade); if (a) askValue += askNum(a) * c.quantity; else unpriced += c.quantity; });
+  $("sum").innerHTML = '<span><b>' + items.toLocaleString() + '</b> <span class="muted">items · ' + rows.length.toLocaleString() + ' lines</span> · <b>' + money(value) + '</b> <span class="muted">' + qualityLabel() + ' value</span>'
+    + (PRICE_FALLBACK_ASKING ? ' · <span class="askv" id="asktotal" title="' + esc(ASK_TIP) + '">' + ASK_BADGE + '<b>' + money(askValue) + '</b> asking price</span> · <span class="muted">' + unpriced.toLocaleString() + ' items unpriced</span>' : "") + '</span>'
     + '<span class="small muted">' + (priced ? priced.toLocaleString() + ' of ' + rows.length.toLocaleString() + ' lines priced from eBay AU sold' : 'Values fill in once eBay sold data is connected') + '</span>';
   $("grid").innerHTML = rows.length ? rows.slice(0, st.shown).map(c => tile(c.products, c)).join("")
     : '<div class="empty">' + (st.col.length ? "Nothing in your collection matches these filters." : "No collection items on this account yet.") + '</div>';
@@ -473,6 +525,7 @@ async function renderCatalog(reset){
   const res = await q.range(from, to);
   if (res.error) { $("grid").innerHTML = '<div class="empty">Couldn\'t load: ' + esc(res.error.message) + '</div>'; return; }
   st.cat = reset ? (res.data || []) : st.cat.concat(res.data || []); st.catCount = res.count || 0;
+  await loadAsks((res.data || []).map(p => p.id));
   $("sum").innerHTML = '<span><b>' + st.catCount.toLocaleString() + '</b> <span class="muted">products</span> · <b id="catval">…</b> <span class="muted">' + qualityLabel() + ' value, one of each</span></span><span class="small muted">New sets and cards are added automatically</span>';
   if (reset) catalogTotals();
   $("grid").innerHTML = st.cat.length ? st.cat.map(p => tile(p, null)).join("")
@@ -534,18 +587,42 @@ async function openSheet(p){
   const owned = st.col.filter(c => c.products && c.products.id === p.id);
   const rows = [["Game", GNAME[p.game_id]], ["Series", ser && ser.name], ["Set", s.name], ["Number", p.card_number], ["Rarity", p.rarity],
     ["Language", p.language === "JP" ? "Japanese" : "English"], ["Type", p.kind === "sealed" ? "Sealed product" : "Single card"], ["Variant", p.variant]].filter(r => r[1]);
-  const lines = owned.map(c => { const pr = priceOf(p, c.condition, c.grade);
-    return c.quantity + " × " + esc(COND[c.condition] || c.condition) + (c.grade ? " · " + esc(c.grade) : "") + " — " + (pr != null ? money(pr) + " each" : "no sold data yet"); }).join("<br>");
+  const lines = owned.map(c => { const pr = priceOf(p, c.condition, c.grade), a = pr == null ? askOf(p, c.condition, c.grade) : null;
+    return c.quantity + " × " + esc(COND[c.condition] || c.condition) + (c.grade ? " · " + esc(c.grade) : "") + " — "
+      + (pr != null ? money(pr) + " each" : a ? '<span class="askv" title="' + esc(ASK_TIP) + '">' + ASK_BADGE + 'Asking price ' + askText(a, " each") + '</span>' : PRICE_FALLBACK_ASKING ? "no price yet" : "no sold data yet"); }).join("<br>");
   $("sheet").innerHTML = '<button class="close" id="x" aria-label="Close">×</button><div class="hero">'
     + (p.image_url ? '<img alt="' + esc(p.name) + '" src="' + esc(p.image_url) + '">' : "")
     + '<div style="flex:1;min-width:200px"><h2>' + esc(p.name) + '</h2><div class="kv">' + rows.map(r => '<span>' + r[0] + '</span><span>' + esc(r[1]) + '</span>').join("") + '</div>'
     + '<div class="row" style="margin-top:12px"><button class="btn" id="sheetcart">Add to cart</button>' + '<a class="iconbtn" style="text-decoration:none" target="_blank" rel="noopener" href="' + esc(ebaySoldUrl(p, owned[0] ? owned[0].condition : "NM", owned[0] ? owned[0].grade : "")) + '">eBay sold listings ↗</a>' + (owned.length ? ' <button class="iconbtn" id="sheetlist">List for friends</button>' : "") + '</div></div></div>'
     + (owned.length ? '<div class="box"><h3>In your collection</h3>' + lines + '</div>' : "")
-    + qualityTable(p) + '<div class="box" id="soldbox"><h3>eBay sold prices</h3><span class="muted small">Loading…</span></div>';
+    + qualityTable(p) + '<div class="box" id="soldbox"><h3>eBay sold prices</h3><span class="muted small">Loading…</span></div>'
+    + (PRICE_FALLBACK_ASKING ? '<div class="box" id="askbox"><h3>Current eBay listings</h3><span class="muted small">Loading…</span></div>' : "");
   $("x").onclick = closeSheet; $("sheetcart").onclick = () => openAddToCart(p, owned[0] ? owned[0].condition : "NM", owned[0] ? owned[0].grade : "");
   if ($("sheetlist")) $("sheetlist").onclick = () => openListing(p, owned);
   $("scrim").classList.add("open"); $("sheet").classList.add("open");
   renderSold(p, owned.length ? owned[0].condition : "NM", owned.length ? (owned[0].grade || "") : "");
+  renderAsks(p, owned.length ? owned[0].condition : "NM", owned.length ? (owned[0].grade || "") : "");
+}
+// current eBay listings (asking prices): up to 10 non-excluded, lowest first
+async function renderAsks(p, cond, grade){
+  if (!PRICE_FALLBACK_ASKING || !$("askbox")) return;
+  const [ap, al] = await Promise.all([
+    sb.from("ask_price_v").select(ASK_COLS).eq("product_id", p.id).eq("market", "AU"),
+    sb.from("ask_listings").select("id,title,price,currency,url,grade,last_seen").eq("product_id", p.id).eq("market", "AU").eq("excluded", false)
+      .order("price", { ascending:true }).limit(10)]);
+  const box = $("askbox"); if (!box) return;
+  (ap.data || []).forEach(r => st.asks.set(askKey(r), r));
+  const a = priceOf(p, cond, grade) == null ? askOf(p, cond, grade) : null;
+  const upd = (ap.data || []).map(r => r.updated_at).filter(Boolean).sort().pop();
+  const fmt = r => !r.currency || r.currency === "AUD" ? money(+r.price) : esc(r.currency) + " " + (+r.price).toFixed(2);
+  box.innerHTML = '<h3>Current eBay listings</h3>'
+    + (a ? '<div class="askv" title="' + esc(ASK_TIP) + '" style="font-family:Sora,sans-serif;font-size:22px;font-weight:700">' + ASK_BADGE + 'Asking price ' + esc(askText(a)) + '</div>'
+      + '<div class="small muted">' + (a.enough_listings ? "Median of " + a.listings + " current eBay AU listings" : "Lowest of only " + a.listings + " current listing" + (+a.listings === 1 ? "" : "s") + ", too few for a median") + ' · ' + esc((COND[a.condition] || a.condition) + (a.grade ? " · " + a.grade : "")) + '</div>' : "")
+    + '<div class="small muted" style="margin:4px 0 2px">' + ASK_TIP.replace("Asking price. ", "") + '</div>'
+    + ((al.data || []).length ? (al.data || []).map(r => '<div class="sale"><div><a href="' + esc(r.url) + '" target="_blank" rel="noopener">' + esc(r.title || "eBay listing") + '</a>'
+        + '<div class="small muted">' + esc(r.grade || "Raw") + '</div></div><div style="text-align:right"><b>' + fmt(r) + '</b></div></div>').join("")
+      : '<div class="small muted" style="margin-top:6px">No current eBay listings found.</div>')
+    + (upd ? '<div class="small muted" style="margin-top:8px">Updated ' + ago(upd) + '</div>' : "");
 }
 async function renderSold(p, cond, grade){
   const box = $("soldbox"); if (!box) return;
@@ -671,9 +748,13 @@ function bulkCart(items){
 function qualityTable(p){
   const rows = []; st.prices.forEach((r, k) => { if (k.startsWith(p.id + "|")) rows.push(r); });
   rows.sort((a, b) => (b.grade ? 1 : 0) - (a.grade ? 1 : 0) || (+b.median) - (+a.median));
-  return '<div class="box"><h3>Prices by quality</h3>' + (rows.length
+  const asks = []; st.asks.forEach((r, k) => { if (PRICE_FALLBACK_ASKING && k.startsWith(p.id + "|") && !st.prices.has(k)) asks.push(r); });
+  asks.sort((a, b) => (b.grade ? 1 : 0) - (a.grade ? 1 : 0) || askNum(b) - askNum(a));
+  return '<div class="box"><h3>Prices by quality</h3>' + (rows.length || asks.length
     ? '<div class="tablewrap"><table class="rt"><thead><tr><th>Quality</th><th>Median sold</th><th>Sales</th><th>Population</th></tr></thead><tbody>'
-      + rows.map(r => '<tr><td>' + esc(r.grade || (COND[r.condition] || r.condition)) + '</td><td>' + money(+r.median) + '</td><td>' + r.sales + '</td><td class="muted">—</td></tr>').join("") + '</tbody></table></div>'
+      + rows.map(r => '<tr><td>' + esc(r.grade || (COND[r.condition] || r.condition)) + '</td><td>' + money(+r.median) + '</td><td>' + r.sales + '</td><td class="muted">—</td></tr>').join("")
+      + asks.map(r => '<tr class="askrow"><td>' + esc(r.grade || (COND[r.condition] || r.condition)) + '</td><td>' + askHTML(r) + '</td><td class="muted">—</td><td class="muted">—</td></tr>').join("") + '</tbody></table></div>'
+      + (rows.length ? "" : '<div class="small muted">No eBay sold prices yet for any quality. Asking prices are shown meanwhile.</div>')
     : '<div class="small muted">No eBay sold prices yet for any quality.</div>')
     + '<div class="small muted" style="margin-top:6px">Population counts need a grading-company data source (e.g. PSA\'s API). Not connected yet.</div></div>';
 }
@@ -724,10 +805,11 @@ async function renderInvest(){
   st.invRange = st.invRange || "6M";
   // today, from your live collection
   const lines = st.col.filter(c => matchP(c.products));
-  let cur = 0, items = 0, priced = 0; const sm = new Map();
+  let cur = 0, items = 0, priced = 0, askValue = 0, unpriced = 0; const sm = new Map();
   GAMES.forEach(([g]) => ["card","sealed"].forEach(k => sm.set(g + "|" + k, { game:g, kind:k, value:0, items:0 })));
   lines.forEach(c => { const p = c.products, pr = priceOf(p, c.condition, c.grade), val = pr != null ? pr * c.quantity : 0;
     items += c.quantity; cur += val; if (pr != null) priced += c.quantity;
+    else { const a = askOf(p, c.condition, c.grade); if (a) askValue += askNum(a) * c.quantity; else unpriced += c.quantity; }
     const sl = sm.get(p.game_id + "|" + p.kind); if (sl) { sl.value += val; sl.items += c.quantity; } });
   const slices = [...sm.values()], byValue = cur > 0;
   // history
@@ -739,7 +821,8 @@ async function renderInvest(){
   v.innerHTML = '<div class="inv">'
     + '<section class="panel"><div class="kpi"><div><div class="small muted">Portfolio value today</div><div class="bigv">' + money(cur) + '</div>'
     + '<div class="small ' + (chg == null ? "muted" : chg >= 0 ? "up" : "down") + '">' + (chg == null ? items.toLocaleString() + " items · " + (priced ? priced.toLocaleString() + " priced from eBay AU sold" : "values arrive once eBay is connected")
-        : (chg >= 0 ? "▲ " : "▼ ") + money(Math.abs(chg)) + " (" + (chg / first.value * 100).toFixed(1) + "%) since " + new Date(first.day).toLocaleDateString("en-AU", { day:"numeric", month:"short" })) + '</div></div>'
+        : (chg >= 0 ? "▲ " : "▼ ") + money(Math.abs(chg)) + " (" + (chg / first.value * 100).toFixed(1) + "%) since " + new Date(first.day).toLocaleDateString("en-AU", { day:"numeric", month:"short" })) + '</div>'
+    + (PRICE_FALLBACK_ASKING ? '<div class="small" id="askinv"><span class="askv" title="' + esc(ASK_TIP) + '">' + ASK_BADGE + money(askValue) + ' asking price</span> <span class="muted">· not included above · ' + unpriced.toLocaleString() + ' items unpriced</span></div>' : "") + '</div>'
     + '<div class="ranges">' + ["1M","3M","6M","1Y","All"].map(k => '<button class="chip" data-range="' + k + '" aria-pressed="' + (st.invRange === k) + '">' + k + '</button>').join("") + '</div></div>'
     + lineChart(pts) + '</section>'
     + '<section class="panel"><h3>Diversification</h3><div class="small muted" style="margin-bottom:8px">' + (byValue ? "Share of your portfolio value, by game, cards vs sealed." : "Sized by item count until eBay prices arrive, then by dollar value.") + '</div>' + donut(slices, byValue) + '</section>'
@@ -1038,7 +1121,7 @@ function renderCarts(){
       + '<div><div class="nm">' + esc(p.name) + '</div><div class="sub">' + esc(setOf(p).name || "") + (p.card_number ? " · " + esc(p.card_number) : "") + ' · ' + esc(COND[i.condition] || i.condition) + (p.language === "JP" ? " · JP" : "") + '</div>'
       + '<div class="tools2">' + (done ? '<span class="small muted">× ' + i.quantity + '</span>' : '<button class="q" data-li="dec">−</button><span class="qn">' + i.quantity + '</span><button class="q" data-li="inc">+</button>')
       + '<input class="pricein" data-li="price" inputmode="decimal" ' + (done ? "disabled " : "") + 'placeholder="' + (u != null ? "eBay " + u.toFixed(2) : "Price") + '" value="' + (i.unit_price != null ? (+i.unit_price).toFixed(2) : "") + '" aria-label="Unit price (AUD)"></div></div>'
-      + '<div><div class="lt">' + (eff != null ? money(eff * i.quantity) : '<span class="warn">No price</span>') + '</div>' + (done ? "" : '<button class="x" data-li="rm" aria-label="Remove from cart">×</button>') + '</div></div>'; };
+      + '<div><div class="lt">' + (eff != null ? money(eff * i.quantity) : '<span class="warn">' + (PRICE_FALLBACK_ASKING ? "Needs sold data" : "No price") + '</span>') + '</div>' + (done ? "" : '<button class="x" data-li="rm" aria-label="Remove from cart">×</button>') + '</div></div>'; };
   const sideHTML = (side, T, label, hint) => '<div class="side ' + side + '"><h3>' + label + ' <span>' + money(T.total) + '</span></h3><div class="small muted">' + hint + '</div>'
     + (T.items.length ? T.items.map(lineHTML).join("") : '<div class="small muted" style="padding:12px 0">Nothing here yet.</div>')
     + '<div class="tot"><span>Subtotal (' + T.items.reduce((n, i) => n + i.quantity, 0) + ' items)</span><b>' + money(T.sub) + '</b>'
@@ -1050,6 +1133,7 @@ function renderCarts(){
     + (done ? '<p class="small muted">Completed ' + new Date(cart.completed_at).toLocaleString("en-AU") + '. Your collection was updated.</p>' : "")
     + '<div class="sides">' + sideHTML("buy", B, "Buy", "Items you're getting — added to your collection on Proceed.") + sideHTML("sell", S, "Sell", "Items you're giving — removed from your collection on Proceed.") + '</div>'
     + '<div class="net"><div><div class="small muted">Sell ' + money(S.total) + ' − Buy ' + money(B.total) + '</div><div class="big" style="color:' + (net >= 0 ? "var(--good)" : "#FF8A7A") + '">' + (net >= 0 ? "You receive " : "You pay ") + money(Math.abs(net)) + '</div></div>'
+    + (PRICE_FALLBACK_ASKING && B.unpriced + S.unpriced ? '<div class="warn" id="netwarn">Needs sold data: ' + (B.unpriced + S.unpriced) + ' line(s) left out of the net. Asking prices are never used here.</div>' : "")
     + (done ? "" : '<button class="btn" id="proceed"' + (B.items.length + S.items.length ? "" : " disabled") + '>Proceed</button>') + '</div>';
   $("cartsel").onchange = async e => { st.cartId = +e.target.value; await loadCartItems(); renderCarts(); };
   $("cnew").onclick = async () => { await newCart(); render(false); };

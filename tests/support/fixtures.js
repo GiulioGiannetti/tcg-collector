@@ -71,7 +71,7 @@ const cart_items = [
 ];
 
 function tables(){
-  return { sets, series, products, collection_items, catalog_v, price_v, sold_review_v, ask_price_v, ask_listings, carts, cart_items,
-    portfolio_snapshots: [], set_ratio_v: [], upcoming_sets: [], news_items: [], profiles: [], follows: [], listings: [], offers: [], profile_contacts: [] };
+  return structuredClone({ sets, series, products, collection_items, catalog_v, price_v, sold_review_v, ask_price_v, ask_listings, carts, cart_items,
+    portfolio_snapshots: [], set_ratio_v: [], upcoming_sets: [], news_items: [], profiles: [], follows: [], listings: [], offers: [], profile_contacts: [] });
 }
 module.exports = { tables, NOW };
