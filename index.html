@@ -695,6 +695,13 @@ const setLabel = s => !s.name ? "" : s.language === "JP" && !/\(JP\)/.test(s.nam
 // tcg.pokemon.com 330×460 → 660×920 (-2x), Scryfall normal 488×680 → large 672×936
 const hiRes = u => /^https:\/\/dz3we2x72f7ol\.cloudfront\.net\/.+(?<!-2x)\.png$/.test(u || "") ? u.replace(/\.png$/, "-2x.png")
   : /^https:\/\/cards\.scryfall\.io\/normal\//.test(u || "") ? u.replace("/normal/", "/large/") : u;
+// Small tiles and list thumbnails use the lighter file the same host offers (the stored image stays the fallback):
+// pokemontcg.io 733×1024 → 245×342, TCGdex high → low, TCGplayer 1000px → 400px, Limitless LG → SM
+const smallImg = u => !u ? u : u.replace(/^(https:\/\/images\.pokemontcg\.io\/.+)_hires\.png$/, "$1.png")
+  .replace(/^(https:\/\/assets\.tcgdex\.net\/.+)\/high\.webp$/, "$1/low.webp")
+  .replace(/^(https:\/\/tcgplayer-cdn\.tcgplayer\.com\/product\/\d+)_in_1000x1000\.jpg$/, "$1_400w.jpg")
+  .replace(/^(https:\/\/limitlesstcg\.[^/]+\/.+)_LG\.png$/, "$1_SM.png");
+const thumbImg = u => '<img alt="" loading="lazy" src="' + esc(smallImg(u)) + '"' + (smallImg(u) !== u ? ' data-fb="' + esc(u) + '"' : "") + ' onerror="imgFail(this)">';
 function openViewer(src, alt){
   const v = document.createElement("div"); v.className = "viewer"; v.setAttribute("role", "dialog"); v.setAttribute("aria-modal", "true");
   v.innerHTML = '<button class="fclose" aria-label="Close">×</button><div class="vscroll"><img alt="' + esc(alt || "") + '" src="' + esc(src) + '"></div><div class="vhint">Tap the card to zoom</div>';
@@ -788,7 +795,7 @@ async function suggest(v){
   items.sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name) || String(b.release_date || "").localeCompare(String(a.release_date || "")) || numKey(a.card_number) - numKey(b.card_number)); items = items.slice(0, 8);
   const box = $("suggest");
   if (!items.length) { box.innerHTML = '<div class="sgmore">No items match “' + esc(v) + '”</div>'; box.hidden = false; return; }
-  box.innerHTML = items.map((p, i) => '<button type="button" class="sg" role="option" data-i="' + i + '">' + (p.image_url ? '<img alt="" loading="lazy" src="' + esc(p.image_url) + '" onerror="this.replaceWith(Object.assign(document.createElement(\'span\'),{className:\'sgph\'}))">' : '<span class="sgph"></span>')
+  box.innerHTML = items.map((p, i) => '<button type="button" class="sg" role="option" data-i="' + i + '">' + (p.image_url ? '<img alt="" loading="lazy" src="' + esc(smallImg(p.image_url)) + '" data-fb="' + esc(p.image_url) + '" onerror="if(this.dataset.fb&&this.src!==this.dataset.fb){this.src=this.dataset.fb;return}this.replaceWith(Object.assign(document.createElement(\'span\'),{className:\'sgph\'}))">' : '<span class="sgph"></span>')
     + '<span class="sgt"><span class="sgn">' + hl(p.name, v) + '</span><span class="sgs">' + esc([setLabel({ name:p.set_name || setOf(p).name, language:p.language }), p.card_number, p.variant && p.variant !== "Normal" ? p.variant : ""].filter(Boolean).join(" · ")) + '</span></span>' + (p.owned ? '<span class="sgo">✓ Owned</span>' : "") + '</button>').join("")
     + '<div class="sgmore">Press Enter to see every match in the grid</div>';
   box.hidden = false;
@@ -1179,7 +1186,10 @@ function bindEmpty(){ const b = $("emptyclear"); if (b) b.onclick = () => { Obje
 const SIZE_ICON = { l:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/></svg>',
   s:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="4.5" height="4.5" rx="1"/><rect x="9.75" y="3" width="4.5" height="4.5" rx="1"/><rect x="16.5" y="3" width="4.5" height="4.5" rx="1"/><rect x="3" y="9.75" width="4.5" height="4.5" rx="1"/><rect x="9.75" y="9.75" width="4.5" height="4.5" rx="1"/><rect x="16.5" y="9.75" width="4.5" height="4.5" rx="1"/><rect x="3" y="16.5" width="4.5" height="4.5" rx="1"/><rect x="9.75" y="16.5" width="4.5" height="4.5" rx="1"/><rect x="16.5" y="16.5" width="4.5" height="4.5" rx="1"/></svg>' };
 const tileSize = () => localStorage.getItem("pf.tiles") === "s" ? "s" : "l";
-function applyTileSize(){ document.body.classList.toggle("tiles-s", tileSize() === "s"); }
+function applyTileSize(){
+  const s = tileSize() === "s"; document.body.classList.toggle("tiles-s", s);
+  document.querySelectorAll(".tile img[data-full]").forEach(i => { const want = s ? i.dataset.small : i.dataset.full; if (i.getAttribute("src") !== want) i.src = want; });
+}
 const sizeBtn = () => { const cur = tileSize(); return '<button type="button" class="iconbtn sizebtn" id="sizebtn" aria-label="Tile size: ' + (cur === "s" ? "small" : "large") + '. Tap to switch" title="Tile size">' + SIZE_ICON[cur === "s" ? "s" : "l"] + (cur === "s" ? "Small" : "Large") + '</button>'; };
 function bindSizeBtn(){ const b = $("sizebtn"); if (!b) return; b.onclick = () => { try { localStorage.setItem("pf.tiles", tileSize() === "s" ? "l" : "s"); } catch (e) {} applyTileSize(); b.outerHTML = sizeBtn(); bindSizeBtn(); }; }
 // pull down at the top to refresh prices, collection and completion
@@ -1254,9 +1264,9 @@ async function loadAsks(ids){
   const todo = [...new Set(ids)].filter(id => id != null && !st.askLoaded.has(id));
   for (let i = 0; i < todo.length; i += 200) {
     const chunk = todo.slice(i, i + 200);
+    chunk.forEach(id => st.askLoaded.add(id));   // claim before awaiting, so an overlapping render doesn't fetch them again
     const { data, error } = await sb.from("ask_price_v").select(ASK_COLS).eq("market", "AU").in("product_id", chunk);
-    if (error) continue;
-    chunk.forEach(id => st.askLoaded.add(id));
+    if (error) { chunk.forEach(id => st.askLoaded.delete(id)); continue; }
     (data || []).forEach(r => st.asks.set(askKey(r), r));
   }
 }
@@ -1336,7 +1346,8 @@ function tile(p, line){
   const qty = line ? line.quantity : ownedQty(p.id, "NM", "");
   const price = valueOf(p, cond, grade), ask = price == null ? askFor(p, cond, grade) : null;
   const qtag = st.quality && p.kind !== "sealed" ? ' <span class="small muted">' + esc(st.quality) + '</span>' : "";
-  const img = p.image_url ? '<img loading="lazy" alt="" src="' + esc(p.image_url) + '" onerror="imgFail(this)">' : '<div class="ph">' + (p.kind === "sealed" ? "Sealed product" : "Image coming") + '</div>';
+  const img = p.image_url ? '<img loading="lazy" alt="" src="' + esc(tileSize() === "s" ? smallImg(p.image_url) : p.image_url) + '" data-full="' + esc(p.image_url) + '" data-small="' + esc(smallImg(p.image_url)) + '"'
+      + (smallImg(p.image_url) !== p.image_url ? ' data-fb="' + esc(p.image_url) + '"' : "") + ' onerror="imgFail(this)">' : '<div class="ph">' + (p.kind === "sealed" ? "Sealed product" : "Image coming") + '</div>';
   const flags = (p.language === "JP" ? '<span class="flag jp">JP</span>' : "") + (p.kind === "sealed" ? '<span class="flag sealed">SEALED</span>' : "")
     + (line && line.for_sale ? '<span class="flag sale">FOR SALE' + (line.asking_price != null ? " " + money(+line.asking_price) : "") + '</span>' : "");
   const prof = line ? profitOf(p, line) : null;
@@ -1810,7 +1821,7 @@ function matchesHTML(feed){
   const avail = feed.filter(l => mine.some(w => w.product_id === l.product_id && (w.max_price == null || l.price == null || +l.price <= +w.max_price)));
   const ownedIds = new Set(st.col.map(c => c.products && c.products.id));
   const theyWant = (st.friendWants || []).filter(w => ownedIds.has(w.product_id));
-  const item = (p, sub, btn) => '<div class="line">' + (p && p.image_url ? '<img alt="" src="' + esc(p.image_url) + '">' : '<div class="ph2"></div>') + '<div><div class="nm">' + esc(p ? p.name : "") + '</div><div class="sub">' + sub + '</div></div><div>' + btn + '</div></div>';
+  const item = (p, sub, btn) => '<div class="line">' + (p && p.image_url ? thumbImg(p.image_url) : '<div class="ph2"></div>') + '<div><div class="nm">' + esc(p ? p.name : "") + '</div><div class="sub">' + sub + '</div></div><div>' + btn + '</div></div>';
   return '<section class="panel"><h3>Matches</h3>'
     + '<h4 class="sub4">On your want list, listed by friends (' + avail.length + ')</h4>' + (avail.length ? avail.map(l => item(l.products, who(l.owner_id) + ' · ' + (l.price != null ? money(+l.price) : "offers"), '<button class="chip" data-offerfor="' + l.id + '">Make offer</button>')).join("") : '<div class="small muted">None right now.</div>')
     + '<h4 class="sub4">Friends want cards you own (' + theyWant.length + ')</h4>' + (theyWant.length ? theyWant.map(w => item(w.products, who(w.owner_id) + (w.max_price ? ' · up to ' + money(+w.max_price) : ""), '<button class="chip" data-listwant="' + w.product_id + '">List it</button>')).join("") : '<div class="small muted">None right now.</div>')
@@ -1944,7 +1955,7 @@ async function openTradeBuilder(friendId){
     let best = -1, bestErr = Math.abs(diff); arr.forEach((x, i) => { if (set.has(i)) return; const v = netVal(x.p, x.condition, x.grade); if (v == null) return; const e = Math.abs(Math.abs(diff) - v); if (e < bestErr) { bestErr = e; best = i; } });
     if (best < 0) break; set.add(best); }
   const row = (x, i, side, set) => '<label class="trow"><input type="checkbox" data-side="' + side + '" data-i="' + i + '"' + (set.has(i) ? " checked" : "") + '>'
-    + (x.p.image_url ? '<img alt="" src="' + esc(x.p.image_url) + '">' : '<span class="ph2"></span>') + '<span><b>' + esc(x.p.name) + '</b>' + (x.wish ? ' <span class="stat">★ wanted</span>' : "")
+    + (x.p.image_url ? thumbImg(x.p.image_url) : '<span class="ph2"></span>') + '<span><b>' + esc(x.p.name) + '</b>' + (x.wish ? ' <span class="stat">★ wanted</span>' : "")
     + '<br><span class="small muted">' + esc((setOf(x.p).name || "") + " · " + (COND[x.condition] || x.condition) + (x.grade ? " " + x.grade : "")) + '</span></span><span class="small">' + (netVal(x.p, x.condition, x.grade) != null ? money(netVal(x.p, x.condition, x.grade)) : "—") + '</span></label>';
   $("sheet").innerHTML = '<button class="close" id="x" aria-label="Close">×</button><h2>Trade with ' + (st.people.get(friendId) ? esc(st.people.get(friendId).display_name) : "friend") + '</h2>'
     + '<div class="small muted">Suggested swap is pre-ticked: their cards on your wishlist for your cards on theirs, balanced at net value (after selling fees). Adjust as you like.</div>'
@@ -2176,7 +2187,7 @@ async function renderFriends(){
   const feed = st.listings.filter(l => l.owner_id !== me), mine = st.listings.filter(l => l.owner_id === me);
   const offersIn = st.offers.filter(o => o.seller_id === me), offersOut = st.offers.filter(o => o.buyer_id === me);
   const person = (id, actions) => '<div class="prow"><div>' + who(id) + (st.contacts.get(id) ? '<div class="small">Contact: ' + esc(st.contacts.get(id)) + '</div>' : "") + '</div><div class="pact">' + actions + '</div></div>';
-  const lrow = (l, act) => { const p = l.products || {}; return '<div class="line">' + (p.image_url ? '<img alt="" src="' + esc(p.image_url) + '">' : '<div class="ph2"></div>')
+  const lrow = (l, act) => { const p = l.products || {}; return '<div class="line">' + (p.image_url ? thumbImg(p.image_url) : '<div class="ph2"></div>')
     + '<div><div class="nm">' + esc(p.name || "") + '</div><div class="sub">' + esc(setOf(p).name || "") + (p.card_number ? " · " + esc(p.card_number) : "") + ' · ' + esc(COND[l.condition] || l.condition) + (l.grade ? " · " + esc(l.grade) : "") + ' · ×' + l.quantity + '</div>'
     + '<div class="sub">' + (l.mode === "trade" ? "For trade" : l.mode === "either" ? "Sale or trade" : "For sale") + (l.note ? " · " + esc(l.note) : "") + '</div>' + (l.owner_id !== me ? '<div class="sub">' + who(l.owner_id) + '</div>' : "") + '</div>'
     + (l.photos && l.photos.length ? '<div class="thumbs">' + l.photos.map(u => '<a href="' + esc(u) + '" target="_blank" rel="noopener"><img alt="Condition photo" src="' + esc(u) + '"></a>').join("") + '</div>' : "")
@@ -2189,7 +2200,7 @@ async function renderFriends(){
     if (!mineSell && o.status === "sent") acts.push(["received","I've received it"]);
     acts.push(["msg","Messages"]);
     if (o.status === "received" && !st.rated.has(o.id)) acts.push(["rate","Rate trade"]);
-    return '<div class="line">' + (p.image_url ? '<img alt="" src="' + esc(p.image_url) + '">' : '<div class="ph2"></div>')
+    return '<div class="line">' + (p.image_url ? thumbImg(p.image_url) : '<div class="ph2"></div>')
       + '<div><div class="nm">' + esc(p.name || "Listing no longer visible") + '</div><div class="sub">' + (mineSell ? "From " : "To ") + who(other) + '</div>'
       + '<div class="sub">×' + o.quantity + (o.price != null ? " at " + money(+o.price) + " each" : "") + (o.message ? ' · "' + esc(o.message) + '"' : "") + '</div>'
       + '<div class="sub"><span class="pill ' + (o.status === "received" ? "pos" : o.status === "declined" || o.status === "withdrawn" ? "early" : "watch") + '">' + esc(OFFER_LABEL[o.status] || o.status) + '</span></div>'
@@ -2375,7 +2386,7 @@ function renderCarts(){
   const done = cart.status === "completed";
   const B = sideTotals("buy", cart), S = sideTotals("sell", cart), net = S.total - B.total;
   const lineHTML = i => { const p = i.products || {}, u = priceOf(p, i.condition, i.grade), eff = unitOf(i);
-    return '<div class="line" data-item="' + i.id + '">' + (p.image_url ? '<img alt="" src="' + esc(p.image_url) + '">' : '<div class="ph2"></div>')
+    return '<div class="line" data-item="' + i.id + '">' + (p.image_url ? thumbImg(p.image_url) : '<div class="ph2"></div>')
       + '<div><div class="nm">' + esc(p.name) + '</div><div class="sub">' + esc(setOf(p).name || "") + (p.card_number ? " · " + esc(p.card_number) : "") + ' · ' + esc(COND[i.condition] || i.condition) + (p.language === "JP" ? " · JP" : "") + '</div>'
       + '<div class="tools2">' + (done ? '<span class="small muted">× ' + i.quantity + '</span>' : '<button class="q" data-li="dec">−</button><span class="qn">' + i.quantity + '</span><button class="q" data-li="inc">+</button>')
       + '<input class="pricein" data-li="price" inputmode="decimal" ' + (done ? "disabled " : "") + 'placeholder="' + (u != null ? "eBay " + u.toFixed(2) : "Price") + '" value="' + (i.unit_price != null ? (+i.unit_price).toFixed(2) : "") + '" aria-label="Unit price (AUD)"></div></div>'
