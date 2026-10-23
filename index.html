@@ -161,12 +161,7 @@ select{background:var(--panel);border:1px solid var(--line);border-radius:10px;p
 .msel{position:relative;flex:1 1 240px;max-width:460px}
 .mbtn{width:100%;display:flex;justify-content:space-between;gap:8px;background:var(--tile);border:1px solid var(--line);border-radius:10px;padding:9px 11px;cursor:pointer;text-align:left}
 .mbtn span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.mpanel{position:absolute;z-index:30;left:0;right:0;top:calc(100% + 4px);background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:8px;box-shadow:0 12px 30px rgba(0,0,0,.45)}
-.msearch{width:100%}
 .mact{display:flex;gap:6px;margin:8px 0;flex-wrap:wrap}.mact .chip{padding:4px 10px;font-size:12px}.mdone{margin-left:auto;background:var(--amber)!important;color:var(--amber-ink);border-color:var(--amber)!important}
-.mlist{max-height:280px;overflow:auto;display:grid;gap:1px}
-.mlist label{display:flex;gap:8px;align-items:center;padding:6px 6px;border-radius:7px;font-size:13px;cursor:pointer}
-.mlist label:hover{background:var(--tile)}.mlist input{accent-color:#FFB547;width:16px;height:16px}
 .snap{display:grid;gap:2px}
 .snap-g{margin:10px 0 2px;font-size:11.5px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
 .snap-row{display:grid;grid-template-columns:1fr auto auto 12px;gap:10px;align-items:center;width:100%;text-align:left;background:var(--tile);border:1px solid var(--line);border-radius:10px;padding:9px 11px;cursor:pointer}
@@ -191,9 +186,6 @@ body.selecting .wrap{padding-bottom:140px}
 .drawer.open{max-height:calc(100dvh - 200px);overflow-y:auto;overscroll-behavior:contain}
 #qual{flex:1 1 240px;max-width:460px}
 @media (max-width:600px){
-  .mpanel{position:fixed;left:8px;right:8px;top:auto;bottom:calc(8px + env(safe-area-inset-bottom,0px));max-height:72dvh;display:flex;flex-direction:column;z-index:50}
-  .mpanel[hidden]{display:none}
-  .mlist{max-height:none;flex:1;min-height:0}
   .k-card .art{aspect-ratio:133/50}
 }
 .cline{display:grid;grid-template-columns:1fr 110px 1fr;gap:6px;align-items:center;padding:6px 0;border-top:1px solid var(--line);font-size:13px}
@@ -223,7 +215,7 @@ body.selecting .wrap{padding-bottom:140px}
 .trow{display:grid;grid-template-columns:20px 40px 1fr auto;gap:8px;align-items:center;padding:7px 0;border-top:1px solid var(--line);font-size:13px;cursor:pointer}
 .trow img,.trow .ph2{width:40px;height:54px;object-fit:contain;border-radius:4px;background:var(--tile)}
 .trow input{accent-color:#FFB547;width:18px;height:18px}
-.mpanel .msearch,.fpop .search{flex:0 0 auto}
+.fpop .search{flex:0 0 auto}
 .k-card .art img{height:100%;width:auto;max-width:100%;aspect-ratio:63/88;object-fit:cover}
 .fpop-scrim{position:fixed;inset:0;z-index:60;background:rgba(5,8,11,.62);display:flex;align-items:flex-end;justify-content:center}
 .fpop{background:var(--panel);border:1px solid var(--line);border-radius:16px 16px 0 0;width:100%;max-width:900px;max-height:88dvh;display:flex;flex-direction:column;gap:8px;padding:12px 12px calc(12px + env(safe-area-inset-bottom,0px));box-shadow:0 -10px 40px rgba(0,0,0,.5)}
@@ -599,35 +591,11 @@ function syncLayers(){
   vsel("set", "Sets", setOpts.map(s => { const cp = compAgg([s]); return { v:String(s.id), name:setLabel(s), sub:compSub(cp, [oneGame() ? "" : GNAME[s.game_id], yr(s.release_date)].filter(Boolean).join(" · ")), logo:s.logo_url, comp:cp }; }), st.setIds,
     v => { st.setIds = v; st.shown = STEP; render(true); });
   vsel("g", "Games", GAMES.map(g => { const gs = st.sets.filter(s => s.game_id === g[0]), a = newestArt(gs); const cp = compAgg(gs.filter(s => st.lang === "all" || s.language === st.lang)); return { v:g[0], name:g[1], sub:compSub(cp, gs.length.toLocaleString() + " sets"), logo:(st.gameLogo || {})[g[0]], comp:cp }; }), st.games, v => { st.games = v; st.seriesIds = []; st.setIds = []; st.shown = STEP; render(true); });
-  msel("spc", "Card types", SPECIALS.map(x => [x, x]), st.specials, v => { st.specials = v; st.shown = STEP; render(true); });
+  vsel("spc", "Card types", SPECIALS.map(x => ({ v:x, name:x, sub:SPECIAL_SUB[x] })), st.specials, v => { st.specials = v; st.shown = STEP; render(true); });
   $("qual").value = st.quality; renderQgrid();
   const n = [st.games.length > 0, st.lang !== "all", st.kind !== "all", st.seriesIds.length > 0, st.setIds.length > 0, st.specials.length > 0, !!st.quality, st.tab === "collection" && st.market !== "all"].filter(Boolean).length;
   $("fcount").innerHTML = n ? '<span class="badge">' + n + '</span>' : "";
 }
-// Multi-select dropdown with search: tick any number of options, apply with Done (or by clicking away)
-function msel(id, label, opts, sel, onChange){
-  const box = $(id); let cur = sel.slice();
-  const summary = sel.length === 0 ? "All " + label.toLowerCase() + " (" + opts.length + ")"
-    : sel.length === 1 ? ((opts.find(o => o[0] === sel[0]) || [0, "1 selected"])[1]) : sel.length + " " + label.toLowerCase() + " selected";
-  box.innerHTML = '<button type="button" class="mbtn" aria-expanded="false"><span>' + esc(summary) + '</span><span aria-hidden="true">▾</span></button>'
-    + '<div class="mpanel" hidden><input class="search msearch" type="search" placeholder="Search ' + label.toLowerCase() + '">'
-    + '<div class="mact"><button type="button" class="chip" data-m="all">Select shown</button><button type="button" class="chip" data-m="none">Clear</button><button type="button" class="chip mdone" data-m="done">Done</button></div>'
-    + '<div class="mlist">' + opts.map(o => '<label><input type="checkbox" value="' + esc(o[0]) + '"' + (sel.includes(o[0]) ? " checked" : "") + '><span>' + esc(o[1]) + '</span></label>').join("") + '</div></div>';
-  const btn = box.querySelector(".mbtn"), panel = box.querySelector(".mpanel"), search = box.querySelector(".msearch");
-  const same = () => cur.length === sel.length && cur.every(v => sel.includes(v));
-  const close = apply => { panel.hidden = true; btn.setAttribute("aria-expanded", "false"); document.removeEventListener("click", outside, true); if (apply && !same()) onChange(cur); };
-  const outside = e => { if (!box.contains(e.target)) close(true); };
-  btn.onclick = () => { if (panel.hidden) { panel.hidden = false; btn.setAttribute("aria-expanded", "true"); search.focus(); setTimeout(() => document.addEventListener("click", outside, true)); } else close(true); };
-  search.oninput = () => { const q = search.value.toLowerCase(); box.querySelectorAll(".mlist label").forEach(l => l.hidden = q && !l.textContent.toLowerCase().includes(q)); };
-  box.querySelectorAll(".mlist input").forEach(c => c.onchange = () => { cur = c.checked ? [...new Set(cur.concat(c.value))] : cur.filter(v => v !== c.value); });
-  box.querySelectorAll("[data-m]").forEach(b => b.onclick = () => {
-    if (b.dataset.m === "done") return close(true);
-    if (b.dataset.m === "none") { cur = []; box.querySelectorAll(".mlist input").forEach(c => c.checked = false); return; }
-    box.querySelectorAll(".mlist label:not([hidden]) input").forEach(c => { c.checked = true; cur = [...new Set(cur.concat(c.value))]; });
-  });
-  box.onkeydown = e => { if (e.key === "Escape") { e.stopPropagation(); close(false); btn.focus(); } };
-}
-
 // ---------- settings: region + eBay link behaviour ----------
 const REGIONS = { AU:{ name:"Australia", host:"www.ebay.com.au" }, US:{ name:"United States", host:"www.ebay.com" }, UK:{ name:"United Kingdom", host:"www.ebay.co.uk" }, CA:{ name:"Canada", host:"www.ebay.ca" } };
 const region = () => { const r = localStorage.getItem("pf.region"); return REGIONS[r] ? r : "AU"; };
@@ -723,6 +691,10 @@ const yr = d => d ? String(d).slice(0, 4) : "";
 const setLabel = s => !s.name ? "" : s.language === "JP" && !/\(JP\)/.test(s.name) ? s.name + " (JP)" : s.name;
 
 // ---------- full-screen card viewer (tap to zoom, drag/scroll to pan) ----------
+// Grids use the stored image; the card page uses the larger file the same host offers:
+// tcg.pokemon.com 330×460 → 660×920 (-2x), Scryfall normal 488×680 → large 672×936
+const hiRes = u => /^https:\/\/dz3we2x72f7ol\.cloudfront\.net\/.+(?<!-2x)\.png$/.test(u || "") ? u.replace(/\.png$/, "-2x.png")
+  : /^https:\/\/cards\.scryfall\.io\/normal\//.test(u || "") ? u.replace("/normal/", "/large/") : u;
 function openViewer(src, alt){
   const v = document.createElement("div"); v.className = "viewer"; v.setAttribute("role", "dialog"); v.setAttribute("aria-modal", "true");
   v.innerHTML = '<button class="fclose" aria-label="Close">×</button><div class="vscroll"><img alt="' + esc(alt || "") + '" src="' + esc(src) + '"></div><div class="vhint">Tap the card to zoom</div>';
@@ -1261,6 +1233,7 @@ function priceOf(p, cond, grade){
 const QUALITIES = [["","Raw (as owned)"],["NM","Near Mint"],["LP","Lightly Played"],["MP","Moderately Played"],["HP","Heavily Played"],["DMG","Damaged"],
   ["PSA 10","PSA 10"],["PSA 9","PSA 9"],["PSA 8","PSA 8"],["BGS 10","BGS 10"],["BGS 9.5","BGS 9.5"],["CGC 10","CGC 10"],["CGC 9.5","CGC 9.5"]];
 const SPECIALS = ["Standard","Promo","Prerelease","Tournament & prize","Jumbo"];
+const SPECIAL_SUB = { "Standard":"Regular set cards", "Promo":"Black Star and other promos", "Prerelease":"Prerelease and staff stamped", "Tournament & prize":"League, prize and tournament cards", "Jumbo":"Oversized cards" };
 const specialOf = p => p.special || "Standard";
 const isGrade = q => /^(PSA|BGS|CGC)/.test(q);
 // price at a grade, whatever condition label the graded sale was stored under
@@ -1491,7 +1464,7 @@ async function openSheet(p, keepQ){
     return c.quantity + " × " + esc(COND[c.condition] || c.condition) + (c.grade ? " · " + esc(c.grade) : "") + " — "
       + (pr != null ? money(pr) + " each" : a ? '<span class="askv" title="' + esc(ASK_TIP) + '">' + ASK_BADGE + 'Asking price ' + askText(a, " each") + '</span>' : PRICE_FALLBACK_ASKING ? "no price yet" : "no sold data yet"); }).join("<br>");
   $("sheet").innerHTML = '<button class="close" id="x" aria-label="Close">×</button><div class="hero">'
-    + (p.image_url ? '<img id="heroimg" alt="' + esc(p.name) + '" src="' + esc(p.image_url) + '" title="Tap to view full size">' : "")
+    + (p.image_url ? '<img id="heroimg" alt="' + esc(p.name) + '" src="' + esc(hiRes(p.image_url)) + '" data-fb="' + esc(p.image_url) + '" onerror="imgFail(this)" title="Tap to view full size">' : "")
     + '<div style="flex:1;min-width:200px"><h2>' + esc(p.name) + '</h2><div class="kv">' + rows.map(r => '<span>' + r[0] + '</span><span>' + esc(r[1]) + '</span>').join("") + '</div>'
     + '<div class="row" style="margin-top:12px"><button class="btn" id="sheetcart">Add to cart</button>' + '<a class="iconbtn" style="text-decoration:none" target="_blank" rel="noopener" href="' + esc(ebaySoldUrl(p, qc ? qc[0] : owned[0] ? owned[0].condition : "NM", qc ? qc[1] : owned[0] ? owned[0].grade : "")) + '">eBay sold listings ↗' + (qc ? " (" + esc(qc[1] || COND[qc[0]] || qc[0]) + ")" : "") + '</a>' + (owned.length ? ' <button class="iconbtn" id="sheetlist">List for friends</button>' : "") + ' <button class="iconbtn" id="sheetgen">Create eBay listing</button></div></div></div>'
     + qaddHTML(p, qc || (owned[0] ? [owned[0].condition, owned[0].grade || ""] : ["NM", ""]))
@@ -1501,7 +1474,7 @@ async function openSheet(p, keepQ){
   $("x").onclick = closeSheet; $("sheetcart").onclick = () => openAddToCart(p, owned[0] ? owned[0].condition : "NM", owned[0] ? owned[0].grade : "");
   if ($("sheetlist")) $("sheetlist").onclick = () => openListing(p, owned);
   $("sheetgen").onclick = () => openListingGen(p, owned[0] || null);
-  if ($("heroimg")) $("heroimg").onclick = () => openViewer(p.image_url, p.name);
+  if ($("heroimg")) $("heroimg").onclick = () => openViewer($("heroimg").currentSrc || p.image_url, p.name);
   $("scrim").classList.add("open"); $("sheet").classList.add("open");
   renderSheetExtras(p, owned); bindQadd(p);
   renderSold(p, qc ? qc[0] : owned.length ? owned[0].condition : "NM", qc ? qc[1] : owned.length ? (owned[0].grade || "") : "");

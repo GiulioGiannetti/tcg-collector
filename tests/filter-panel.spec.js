@@ -1,6 +1,6 @@
 // Filter panel: centred dialog on desktop (like the Series/Sets pickers), bottom sheet on phones.
 const { test, expect } = require("@playwright/test");
-const { open } = require("./support/mock");
+const { open, tab } = require("./support/mock");
 
 test("desktop: Filters opens centred with a title and closes with ×, Escape or outside click", async ({ page }) => {
   await page.setViewportSize({ width: 1366, height: 860 });
@@ -37,4 +37,22 @@ test("phone: Filters stays a bottom sheet without the desktop header", async ({ 
   await expect(page.locator(".dhead")).toBeHidden();
   const box = await page.locator("#drawer").boundingBox();
   expect(Math.round(box.y + box.height)).toBe(860);   // anchored to the bottom edge
+});
+
+test("Card type opens the same tile popup as Series and Sets, and filters on Done", async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 860 });
+  await open(page, { mutate: db => { db.catalog_v.find(p => p.id === 2).special = "Promo"; } });
+  await tab(page, "Catalog");
+  await page.locator("#ftoggle").click();
+  await expect(page.locator("#spc .mbtn")).toHaveText(/All card types \(5\)/);
+  await page.locator("#spc .mbtn").click();
+  const pop = page.locator(".fpop");
+  await expect(pop.locator("h3")).toHaveText("Card types");
+  await expect(pop.locator(".ftile")).toHaveCount(5);
+  await expect(pop.locator(".ftile", { hasText: "Promo" })).toContainText("Black Star and other promos");
+  await pop.locator(".ftile", { hasText: "Promo" }).click();
+  await pop.locator(".mdone").click();
+  await expect(page.locator(".fpop-scrim")).toHaveCount(0);
+  await expect(page.locator("#spc .mbtn")).toContainText("Promo");
+  await expect(page.locator(".tile")).toHaveCount(1);
 });
