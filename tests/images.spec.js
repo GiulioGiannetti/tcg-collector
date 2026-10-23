@@ -23,3 +23,11 @@ test("other image hosts are shown unchanged on the card page", async ({ page }) 
   await tileOf(page, "Charizard").locator(".name").click();
   await expect(page.locator("#heroimg")).toHaveAttribute("src", other);
 });
+
+test("Scryfall card: card page uses the large image", async ({ page }) => {
+  const normal = "https://cards.scryfall.io/normal/front/3/5/359ab776-e30c-4ccf-8fb8-8597812f131d.jpg?1783917933";
+  await open(page, { mutate: db => { for (const t of [db.products, db.catalog_v]) t.find(p => p.id === 1).image_url = normal; } });
+  await tab(page, "My collection");
+  await tileOf(page, "Charizard").locator(".name").click();
+  await expect(page.locator("#heroimg")).toHaveAttribute("src", normal.replace("/normal/", "/large/"));
+});

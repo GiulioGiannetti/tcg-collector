@@ -691,8 +691,10 @@ const yr = d => d ? String(d).slice(0, 4) : "";
 const setLabel = s => !s.name ? "" : s.language === "JP" && !/\(JP\)/.test(s.name) ? s.name + " (JP)" : s.name;
 
 // ---------- full-screen card viewer (tap to zoom, drag/scroll to pan) ----------
-// tcg.pokemon.com publishes each card at 330×460 and 660×920 (-2x); grids use the first, the card page the second
-const hiRes = u => /^https:\/\/dz3we2x72f7ol\.cloudfront\.net\/.+(?<!-2x)\.png$/.test(u || "") ? u.replace(/\.png$/, "-2x.png") : u;
+// Grids use the stored image; the card page uses the larger file the same host offers:
+// tcg.pokemon.com 330×460 → 660×920 (-2x), Scryfall normal 488×680 → large 672×936
+const hiRes = u => /^https:\/\/dz3we2x72f7ol\.cloudfront\.net\/.+(?<!-2x)\.png$/.test(u || "") ? u.replace(/\.png$/, "-2x.png")
+  : /^https:\/\/cards\.scryfall\.io\/normal\//.test(u || "") ? u.replace("/normal/", "/large/") : u;
 function openViewer(src, alt){
   const v = document.createElement("div"); v.className = "viewer"; v.setAttribute("role", "dialog"); v.setAttribute("aria-modal", "true");
   v.innerHTML = '<button class="fclose" aria-label="Close">×</button><div class="vscroll"><img alt="' + esc(alt || "") + '" src="' + esc(src) + '"></div><div class="vhint">Tap the card to zoom</div>';
