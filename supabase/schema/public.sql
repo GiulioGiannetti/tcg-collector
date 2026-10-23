@@ -23,6 +23,39 @@ COMMENT ON SCHEMA "public" IS 'standard public schema';
 
 
 
+CREATE OR REPLACE FUNCTION "public"."add_promo_printings"("p_set" bigint, "p_apply" boolean DEFAULT false) RETURNS integer
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public', 'extensions'
+    AS $_$
+declare k record; n int := 0; v_lang text; v_game text; base text; vlabel text; tag text;
+begin
+  select language, game_id into v_lang, v_game from sets where id = p_set;
+  for k in select t.* from tcgp_keys t where t.set_id = p_set and t.sub_type in ('Normal', 'Holofoil', 'Reverse Holofoil') order by t.num, t.product_id loop
+    tag := tcgp_promo_tag(k.name);
+    vlabel := case when tag like '%cosmos holo%' then 'Holofoil (Cosmos)' when tag like '%cracked ice%' then 'Holofoil (Cracked Ice)' else k.sub_type end;
+    -- already held: same number, same finish family and the same tags in our name
+    continue when exists (select 1 from products p where p.set_id = p_set and p.kind = 'card' and tcgp_num(p.card_number) = k.num
+                           and tcgp_our_tag(p.name, p.variant) = tcgp_their_tag(k.name)
+                           and ((select count(*) from tcgp_keys t2 where t2.set_id = p_set and t2.num = k.num and tcgp_their_tag(t2.name) = tcgp_their_tag(k.name)) = 1
+                                or (select sub_type from tcgp_variant_key(p.variant)) = k.sub_type));
+    n := n + 1;
+    base := trim(regexp_replace(regexp_replace(k.name, '\s+-\s+[A-Za-z0-9/]+(\s|$).*$', ''), '\s*\(.*$', ''));
+    if p_apply then
+      insert into products (game_id, set_id, kind, name, card_number, rarity, variant, language, image_url, external_ids, price_tier, special)
+      values (v_game, p_set, 'card',
+              base || coalesce(' (' || nullif(initcap(replace(replace(replace(tag, '|', ') ('), 'cosmos holo', ''), 'cracked ice holo', '')), '') || ')', ''),
+              k.number, k.rarity, vlabel, v_lang, replace(k.image_url, '_200w.jpg', '_in_1000x1000.jpg'),
+              jsonb_build_object('tcgplayer', k.product_id, 'tcgp_checked', current_date::text), 'normal', 'Promo');
+      insert into tcgp_reconcile_log(applied, set_id, action, product_id, detail) values (true, p_set, 'add_promo', k.product_id, k.number || ' ' || k.name || ' [' || vlabel || ']');
+    end if;
+  end loop;
+  return n;
+end $_$;
+
+
+ALTER FUNCTION "public"."add_promo_printings"("p_set" bigint, "p_apply" boolean) OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."adjust_collection"("p_product" bigint, "p_condition" "text", "p_grade" "text", "p_delta" integer) RETURNS integer
     LANGUAGE "plpgsql"
     AS $$
@@ -130,7 +163,7 @@ CREATE OR REPLACE FUNCTION "public"."audit_variants_batch"("max_n" integer DEFAU
 declare r record; n int := 0; lines int := 0; k int;
 begin
   for r in select c.tid, c.lang from variant_audit_candidates c
-           where not exists (select 1 from variant_audit a where a.tcgdex_id = c.tid) order by c.tid limit max_n loop
+           where not exists (select 1 from variant_audit a where a.tcgdex_id = c.tid and a.checked_at > now() - interval '30 days') order by c.tid limit max_n loop
     k := audit_card_variants(r.tid, r.lang);
     if k = 0 then   -- no detailed variants at TCGdex: record it so the queue moves on
       insert into variant_audit (product_id, tcgdex_id, verdict)
@@ -139,7 +172,7 @@ begin
     end if;
     n := n + 1; lines := lines + greatest(k, 0);
   end loop;
-  return jsonb_build_object('cards', n, 'lines', lines, 'left', (select count(*) from variant_audit_candidates c where not exists (select 1 from variant_audit a where a.tcgdex_id = c.tid)));
+  return jsonb_build_object('cards', n, 'lines', lines, 'left', (select count(*) from variant_audit_candidates c where not exists (select 1 from variant_audit a where a.tcgdex_id = c.tid and a.checked_at > now() - interval '30 days')));
 end $$;
 
 
@@ -445,6 +478,25 @@ end $$;
 ALTER FUNCTION "public"."check_magic_counts"() OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."check_ygo_counts"() RETURNS "jsonb"
+    LANGUAGE "plpgsql"
+    AS $$
+begin
+  insert into set_count_check (set_id, game_id, source, expected, ours)
+  select s.id, 'yugioh', 'ygoprodeck', y.cnt,
+         (select count(distinct p.card_number) from products p where p.set_id = s.id and p.kind = 'card')
+  from (select x->>'set_name' name, max((x->>'num_of_cards')::int) cnt
+        from jsonb_array_elements((select content::jsonb from extensions.http_get('https://db.ygoprodeck.com/api/v7/cardsets.php'))) x group by 1) y
+  join sets s on s.game_id = 'yugioh' and replace(s.name, '''', '&apos;') = replace(y.name, '''', '&apos;')
+  on conflict (set_id) do update set expected = excluded.expected, ours = excluded.ours, checked_at = now();
+  return (select jsonb_build_object('exact', count(*) filter (where ours = expected), 'short', count(*) filter (where ours < expected),
+                                    'cards_short', sum(expected - ours) filter (where ours < expected)) from set_count_check where game_id = 'yugioh');
+end $$;
+
+
+ALTER FUNCTION "public"."check_ygo_counts"() OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."checklist_num_ok"("code" "text", "num" "text") RETURNS boolean
     LANGUAGE "sql" IMMUTABLE
     AS $$
@@ -613,6 +665,7 @@ begin
       -- prefer variants_detailed: the yes/no flags also switch on for merch exclusives and stamped cards
       if jsonb_array_length(coalesce(j->'variants_detailed', '[]'::jsonb)) > 0 then
         vars := array(select l.label from tcgdex_variant_labels(j->'variants_detailed') l
+                      where l.kind = 'booster'  -- exclusives (Cosmos holos, theme-deck non-holos) are not part of the set
                       order by l.kind <> 'booster', case when l.label = 'Normal' then 0 when l.label = 'Holofoil' then 1
                                when l.label = '1st Edition' then 2 when l.label like 'Reverse%' then 3 else 4 end, l.label);
         if coalesce(array_length(vars, 1), 0) = 0 then vars := array['Normal']; end if;
@@ -625,6 +678,9 @@ begin
         update products q set variant = reverse_pattern_label(rf[1])
          from (select set_id, card_key(card_number) ck, language from products where external_ids->>'tcgdex' = c.tid and game_id = 'pokemon' and kind = 'card' limit 1) k
          where q.set_id = k.set_id and card_key(q.card_number) = k.ck and q.language = k.language and q.kind = 'card' and q.variant = 'Reverse Holofoil'
+           -- keep the plain reverse line when TCGplayer lists a plain reverse for this card
+           and (q.language <> 'EN' or not exists (select 1 from tcgp_keys t where t.set_id = q.set_id and t.num = tcgp_num(q.card_number)
+                                                   and t.sub_type = 'Reverse Holofoil' and t.pattern = ''))
            and not exists (select 1 from products z where z.set_id = k.set_id and card_key(z.card_number) = k.ck and z.language = k.language and z.variant = reverse_pattern_label(rf[1]));
         vars := array_remove(vars, 'Reverse Holofoil');
         vars := vars || array(select reverse_pattern_label(f) from unnest(rf) f where not (reverse_pattern_label(f) = any(vars)));
@@ -655,6 +711,7 @@ begin
         from products p where p.external_ids->>'tcgdex' = c.tid and p.game_id='pokemon' and p.kind='card'
           and not exists (select 1 from products q where q.set_id=p.set_id and card_key(q.card_number)=card_key(p.card_number)
                             and q.variant = v and q.language=p.language)
+          and (p.language <> 'EN' or tcgp_allows(p.set_id, p.card_number, v))
         order by p.id limit 1
         on conflict do nothing;
       end loop;
@@ -953,6 +1010,35 @@ end $_$;
 ALTER FUNCTION "public"."fill_dbs_masters_pack_images"("max_n" integer) OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."fill_dbs_official"("p_game" "text", "p_series" "text") RETURNS integer
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public', 'extensions'
+    AS $_$
+declare c text; n int;
+begin
+  perform http_set_curlopt('CURLOPT_TIMEOUT','45');
+  if p_game = 'fw' then
+    select content into c from http_get('https://www.dbs-cardgame.com/fw/en/cardlist/?search=true&category%5B%5D=' || p_series);
+    insert into dbs_official(game, series_id, card_id, base_id, name)
+    select distinct on (m[1] || coalesce(m[2], '')) 'fw', p_series, m[1] || coalesce(m[2], ''), m[1], trim(m[3])
+    from regexp_matches(c, 'detail\.php\?card_no=([A-Z0-9-]+)(?:&(?:amp;)?p=(_p\d+))?"[^>]*>\s*<img[^>]*alt="[A-Z0-9-]+ ([^"]*)"', 'g') m
+    on conflict do nothing;
+  else
+    select content into c from http_get('https://www.dbs-cardgame.com/us-en/cardlist/?search=true&category=' || p_series);
+    insert into dbs_official(game, series_id, card_id, base_id, name)
+    select distinct on (m[1]) 'masters', p_series, m[1], regexp_replace(m[1], '_.*$', ''), trim(m[2])
+    from regexp_matches(c, '<dt class="cardNumber">([^<]+)</dt>\s*<dd class="cardName">([^<]*)</dd>', 'g') m
+    on conflict do nothing;
+  end if;
+  select count(*) into n from dbs_official where game = p_game and series_id = p_series;
+  update dbs_official_series set loaded_at = now(), cards = n where game = p_game and series_id = p_series;
+  return n;
+end $_$;
+
+
+ALTER FUNCTION "public"."fill_dbs_official"("p_game" "text", "p_series" "text") OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."fill_dbs_pack_images"() RETURNS json
     LANGUAGE "plpgsql"
     AS $_$
@@ -1054,6 +1140,28 @@ end $_$;
 ALTER FUNCTION "public"."fill_onepiece_pack_images"("max_n" integer) OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."fill_op_official"("p_series" "text") RETURNS integer
+    LANGUAGE "plpgsql"
+    AS $_$
+declare c text; v_series text; n int;
+begin
+  select content into c from extensions.http_get('https://en.onepiece-cardgame.com/cardlist/?series=' || p_series);
+  if c is null then return 0; end if;
+  v_series := replace(regexp_replace((regexp_match(c, '<option value="' || p_series || '"[^>]*>([^<]+)</option>'))[1], '&lt;br[^&]*&gt;|&lt;[^&]*&gt;', ' ', 'g'), '&amp;', '&');
+  insert into op_official (series_id, series_name, card_id, base_id, name)
+  select p_series, btrim(regexp_replace(v_series, '\s+', ' ', 'g')), x.cid, regexp_replace(x.cid, '_[a-z]\d+$', ''), x.cname
+  from (select substring(t.chunk from '^([^"]+)"') cid, substring(t.chunk from '<div class="cardName">([^<]*)</div>') cname
+        from regexp_split_to_table(c, '<dl class="modalCol" id="') with ordinality t(chunk, i) where t.i > 1) x
+  where x.cid is not null
+  on conflict (series_id, card_id) do update set name = excluded.name, series_name = excluded.series_name;
+  get diagnostics n = row_count;
+  return n;
+end $_$;
+
+
+ALTER FUNCTION "public"."fill_op_official"("p_series" "text") OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."fill_series_logos"() RETURNS integer
     LANGUAGE "sql"
     AS $$
@@ -1096,6 +1204,40 @@ end $$;
 
 
 ALTER FUNCTION "public"."fill_tcgdex_logos"("max_n" integer) OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."fill_tcgp_group"("p_group" integer) RETURNS integer
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public', 'extensions'
+    AS $$
+declare cat int; pr jsonb; px jsonb; n int; t0 timestamptz := now();
+begin
+  select category_id into cat from tcgp_groups where group_id = p_group;
+  perform http_set_curlopt('CURLOPT_TIMEOUT','45');
+  select (content::jsonb)->'results' into pr from http_get('https://tcgcsv.com/tcgplayer/' || cat || '/' || p_group || '/products');
+  select (content::jsonb)->'results' into px from http_get('https://tcgcsv.com/tcgplayer/' || cat || '/' || p_group || '/prices');
+  if pr is null or px is null then
+    update tcgp_groups set loaded_at = now(), printings = -1 where group_id = p_group;
+    return -1;
+  end if;
+  insert into tcgp_printings(group_id, product_id, sub_type, name, number, rarity, image_url, market, seen_at)
+  select p_group, (p->>'productId')::int, q->>'subTypeName', p->>'name',
+         (select e->>'value' from jsonb_array_elements(p->'extendedData') e where e->>'name' = 'Number'),
+         (select e->>'value' from jsonb_array_elements(p->'extendedData') e where e->>'name' = 'Rarity'),
+         p->>'imageUrl', nullif(q->>'marketPrice','')::numeric, t0
+  from jsonb_array_elements(pr) p
+  join jsonb_array_elements(px) q on q->>'productId' = p->>'productId'
+  where exists (select 1 from jsonb_array_elements(p->'extendedData') e where e->>'name' = 'Number')
+  on conflict (group_id, product_id, sub_type) do update
+    set name = excluded.name, number = excluded.number, rarity = excluded.rarity,
+        image_url = excluded.image_url, market = excluded.market, seen_at = excluded.seen_at;
+  select count(*) into n from tcgp_printings where group_id = p_group and seen_at = t0;
+  update tcgp_groups set loaded_at = t0, printings = n where group_id = p_group;
+  return n;
+end $$;
+
+
+ALTER FUNCTION "public"."fill_tcgp_group"("p_group" integer) OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."fill_yugipedia_logos"("max_n" integer DEFAULT 50) RETURNS json
@@ -1303,6 +1445,48 @@ CREATE OR REPLACE FUNCTION "public"."limitless_jp_url"("p_code" "text", "p_num" 
 
 
 ALTER FUNCTION "public"."limitless_jp_url"("p_code" "text", "p_num" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."list_dbs_official_series"() RETURNS integer
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public', 'extensions'
+    AS $$
+declare c text; n int := 0;
+begin
+  perform http_set_curlopt('CURLOPT_TIMEOUT','30');
+  select content into c from http_get('https://www.dbs-cardgame.com/fw/en/cardlist/');
+  insert into dbs_official_series(game, series_id, series_name)
+  select 'fw', m[1], trim(m[2]) from regexp_matches(c, 'data-val="(\d{6})"[^>]*>([^<]+)</a>', 'g') m
+  on conflict (game, series_id) do update set series_name = excluded.series_name;
+  select content into c from http_get('https://www.dbs-cardgame.com/us-en/cardlist/');
+  insert into dbs_official_series(game, series_id, series_name)
+  select distinct on (m[1]) 'masters', m[1], trim(m[2]) from regexp_matches(c, '<option value="(\d{6})"\s*>([^<]+)</option>', 'g') m
+  on conflict (game, series_id) do update set series_name = excluded.series_name;
+  select count(*) into n from dbs_official_series;
+  return n;
+end $$;
+
+
+ALTER FUNCTION "public"."list_dbs_official_series"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."list_tcgp_groups"("p_category" integer) RETURNS integer
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public', 'extensions'
+    AS $$
+declare n int;
+begin
+  perform http_set_curlopt('CURLOPT_TIMEOUT','30');
+  insert into tcgp_groups(category_id, group_id, name, abbreviation, published)
+  select p_category, (g->>'groupId')::int, g->>'name', g->>'abbreviation', (g->>'publishedOn')::date
+  from http_get('https://tcgcsv.com/tcgplayer/' || p_category || '/groups') h, jsonb_array_elements((h.content::jsonb)->'results') g
+  on conflict (group_id) do update set name = excluded.name, abbreviation = excluded.abbreviation, published = excluded.published;
+  get diagnostics n = row_count;
+  return n;
+end $$;
+
+
+ALTER FUNCTION "public"."list_tcgp_groups"("p_category" integer) OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."listings_check"() RETURNS "trigger"
@@ -1776,6 +1960,17 @@ end $$;
 ALTER FUNCTION "public"."probe_ptcg_alt"("p_batch" integer) OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."product_in_use"("p" bigint) RETURNS boolean
+    LANGUAGE "sql" STABLE
+    AS $$
+  select exists (select 1 from collection_items where product_id = p) or exists (select 1 from cart_items where product_id = p)
+      or exists (select 1 from listings where product_id = p) or exists (select 1 from trade_ledger where product_id = p)
+      or exists (select 1 from wants where product_id = p) or exists (select 1 from price_alerts where product_id = p) $$;
+
+
+ALTER FUNCTION "public"."product_in_use"("p" bigint) OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."products_special"() RETURNS "trigger"
     LANGUAGE "plpgsql"
     AS $$
@@ -1807,7 +2002,7 @@ CREATE OR REPLACE FUNCTION "public"."ptcg_image_url"("p_tcgdex_url" "text") RETU
     LANGUAGE "sql" IMMUTABLE
     AS $_$
   with m as (select regexp_match(p_tcgdex_url, '^https://assets\.tcgdex\.net/en/[^/]+/([^/]+)/([^/]+)/') x),
-  s as (select x[2] num, case
+  s as (select regexp_replace(x[2], '^0+(?=\d)', '') num, case
       when x[1] = 'sv10.5b' then 'zsv10pt5' when x[1] = 'sv10.5w' then 'rsv10pt5' when x[1] = 'swsh12.5' then 'swsh12pt5'
       when x[1] ~ '^(swsh|sm)' and x[1] like '%.5' then regexp_replace(x[1], '\.5$', '5')
       else regexp_replace(regexp_replace(x[1], '([a-z]+)0*(\d)', '\1\2'), '\.5$', 'pt5') end setc from m where x is not null)
@@ -1846,6 +2041,121 @@ $$;
 
 
 ALTER FUNCTION "public"."public_binder"("p_token" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."reconcile_set_with_tcgp"("p_set" bigint, "p_apply" boolean DEFAULT false) RETURNS TABLE("action" "text", "n" integer)
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public', 'extensions'
+    AS $_$
+declare r record; k record; tgt bigint; v_lang text; v_game text; run uuid := gen_random_uuid(); nv text;
+begin
+  select language, game_id into v_lang, v_game from sets where id = p_set;
+  if not exists (select 1 from tcgp_keys where set_id = p_set) then return; end if;
+
+  -- 1. relabel
+  for r in select o.* from product_tcgp_keys o where o.set_id = p_set and o.variant in ('Normal', 'Holofoil')
+    and not exists (select 1 from tcgp_keys t where t.set_id = o.set_id and t.num = o.num and t.sub_type = o.sub_type and t.pattern = '')
+  loop
+    nv := case r.variant when 'Normal' then 'Holofoil' else 'Normal' end;
+    if exists (select 1 from tcgp_keys t where t.set_id = p_set and t.num = r.num and t.pattern = '' and t.sub_type = nv)
+       and not exists (select 1 from product_tcgp_keys o where o.set_id = p_set and o.num = r.num and o.variant = nv) then
+      insert into tcgp_reconcile_log(run_id, applied, set_id, action, product_id, detail)
+      values (run, p_apply, p_set, 'relabel', r.id, r.card_number || ' ' || r.name || ': ' || r.variant || ' -> ' || nv);
+      if p_apply then
+        update products set variant = nv,
+               external_ids = external_ids || jsonb_build_object('variant_was', r.variant, 'tcgp_checked', current_date::text)
+         where id = r.id;
+      end if;
+    end if;
+  end loop;
+
+  -- 2. add missing printings (only the three main finishes)
+  for k in select distinct on (t.num, t.sub_type, t.pattern) t.* from tcgp_keys t
+    where t.set_id = p_set and t.sub_type in ('Normal', 'Holofoil', 'Reverse Holofoil')
+      and not exists (select 1 from product_tcgp_keys o where o.set_id = t.set_id and o.num = t.num and o.sub_type = t.sub_type and o.pattern = t.pattern)
+      and not exists (select 1 from tcgp_reconcile_log l where l.run_id = run and l.action = 'relabel'
+                        and l.product_id in (select o.id from product_tcgp_keys o where o.set_id = t.set_id and o.num = t.num)
+                        and l.detail like '%-> ' || t.sub_type and t.pattern = '')
+    order by t.num, t.sub_type, t.pattern, t.product_id
+  loop
+    insert into tcgp_reconcile_log(run_id, applied, set_id, action, product_id, detail)
+    values (run, p_apply, p_set, 'add', k.product_id, k.number || ' ' || k.name || ' [' || tcgp_variant_label(k.sub_type, k.pattern) || ']');
+    if p_apply then
+      if exists (select 1 from products p where p.set_id = p_set and p.kind = 'card' and tcgp_num(p.card_number) = k.num) then
+        insert into products (game_id, set_id, kind, name, name_jp, card_number, rarity, variant, language, image_url, external_ids, price_tier, special)
+        select p.game_id, p.set_id, p.kind, p.name, p.name_jp, p.card_number, p.rarity, tcgp_variant_label(k.sub_type, k.pattern), p.language,
+               p.image_url, jsonb_build_object('tcgplayer', k.product_id, 'tcgp_checked', current_date::text) ||
+                 case when p.external_ids ? 'tcgdex' then jsonb_build_object('tcgdex', p.external_ids->>'tcgdex') else '{}'::jsonb end,
+               p.price_tier, p.special
+        from products p where p.set_id = p_set and p.kind = 'card' and tcgp_num(p.card_number) = k.num
+        order by (p.variant in ('Normal', 'Holofoil')) desc, p.id limit 1;
+      else
+        insert into products (game_id, set_id, kind, name, card_number, rarity, variant, language, image_url, external_ids, price_tier)
+        values (v_game, p_set, 'card',
+                trim(regexp_replace(regexp_replace(k.name, '\s+-\s+[A-Za-z0-9]+(/[A-Za-z0-9-]+)?(\s.*)?$', ''), '\s*\([^)]*\)\s*$', '')),
+                k.number, k.rarity, tcgp_variant_label(k.sub_type, k.pattern), v_lang,
+                replace(k.image_url, '_200w.jpg', '_in_1000x1000.jpg'),
+                jsonb_build_object('tcgplayer', k.product_id, 'tcgp_checked', current_date::text), 'normal');
+      end if;
+    end if;
+  end loop;
+
+  -- 3. remove printings TCGplayer doesn't list
+  for r in select o.id, o.card_number, o.name, o.num, p.variant from product_tcgp_keys o join products p on p.id = o.id
+    where o.set_id = p_set
+      and p.variant !~ '^(1st Edition|Shadowless|Unlimited)'  -- TCGplayer keeps these printings in separate groups
+      and not exists (select 1 from tcgp_reconcile_log l where l.run_id = run and l.action = 'relabel' and l.product_id = o.id)
+      and not exists (select 1 from tcgp_keys t, tcgp_variant_key(p.variant) vk
+                      where t.set_id = o.set_id and t.num = o.num and t.sub_type = vk.sub_type and t.pattern = vk.pattern)
+  loop
+    if product_in_use(r.id) then
+      insert into tcgp_reconcile_log(run_id, applied, set_id, action, product_id, detail)
+      values (run, p_apply, p_set, 'keep_owned', r.id, r.card_number || ' ' || r.name || ' [' || r.variant || ']');
+      continue;
+    end if;
+    select p.id into tgt from products p where p.set_id = p_set and p.kind = 'card' and p.id <> r.id
+      and tcgp_num(p.card_number) = r.num
+      and exists (select 1 from tcgp_keys t, tcgp_variant_key(p.variant) vk where t.set_id = p_set and t.num = r.num and t.sub_type = vk.sub_type and t.pattern = vk.pattern)
+    order by (p.variant = 'Normal') desc, (p.variant = 'Holofoil') desc, p.id limit 1;
+    if tgt is null then
+      insert into tcgp_reconcile_log(run_id, applied, set_id, action, product_id, detail)
+      values (run, p_apply, p_set, 'no_sibling', r.id, r.card_number || ' ' || r.name || ' [' || r.variant || ']');
+      continue;
+    end if;
+    insert into tcgp_reconcile_log(run_id, applied, set_id, action, product_id, detail)
+    values (run, p_apply, p_set, 'remove', r.id, r.card_number || ' ' || r.name || ' [' || r.variant || ']');
+    if p_apply then perform merge_product(r.id, tgt); end if;
+  end loop;
+
+  insert into tcgp_reconcile_log(run_id, applied, set_id, action, detail) values (run, p_apply, p_set, 'checked', null);
+  return query select l.action, count(*)::int from tcgp_reconcile_log l where l.run_id = run and l.action <> 'checked' group by 1;
+end $_$;
+
+
+ALTER FUNCTION "public"."reconcile_set_with_tcgp"("p_set" bigint, "p_apply" boolean) OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."refresh_card_images"() RETURNS "jsonb"
+    LANGUAGE "plpgsql"
+    AS $_$
+declare r record; probed int := 0; a jsonb; b json; c json;
+begin
+  -- new expansions on tcg.pokemon.com (a few per run; "no page" sets are retried monthly)
+  for r in select s.id from sets s left join pcom_expansions e on e.set_id = s.id
+           where s.game_id = 'pokemon' and s.language = 'EN' and s.release_date > current_date - 730 and not coalesce(s.hidden, false)
+             and s.code !~ '(p|mee|sve|tg|gg)$'
+             and (e.set_id is null or (e.code is null and e.checked_at < now() - interval '30 days'))
+           order by s.release_date desc limit 3 loop
+    perform probe_pcom_expansion(r.id); probed := probed + 1;
+  end loop;
+  a := upgrade_images_tcg_pcom(200);
+  b := upgrade_pokemon_images(150);
+  c := probe_ptcg_alt(40);
+  return jsonb_build_object('expansions_probed', probed, 'tcg_pokemon_com', a, 'pokemontcg_io', b, 'ptcg_alt', c);
+end $_$;
+
+
+ALTER FUNCTION "public"."refresh_card_images"() OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."refresh_fx"() RETURNS "void"
@@ -1892,6 +2202,29 @@ CREATE OR REPLACE FUNCTION "public"."reverse_pattern_label"("foil" "text") RETUR
 
 
 ALTER FUNCTION "public"."reverse_pattern_label"("foil" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."run_catalog_checks"("max_sets" integer DEFAULT 40) RETURNS "jsonb"
+    LANGUAGE "plpgsql"
+    AS $$
+declare r record; n int := 0; m jsonb; y jsonb;
+begin
+  perform extensions.http_set_curlopt('CURLOPT_TIMEOUT', '20');
+  for r in select s.id from sets s left join set_checklist_runs c on c.set_id = s.id
+           where s.game_id = 'pokemon' and not coalesce(s.hidden, false) and s.series_id <> 24
+             and exists (select 1 from products p where p.set_id = s.id)
+             and (c.set_id is null or (s.release_date > current_date - 365 and c.checked_at < now() - interval '25 days'))
+           order by c.set_id is not null, s.release_date desc nulls last limit max_sets loop
+    begin perform fill_bulba_checklist(r.id); n := n + 1; exception when others then null; end;
+  end loop;
+  m := check_magic_counts();
+  y := check_ygo_counts();
+  insert into sync_log (game_id, items, note) values (null, n, 'catalog checks: magic ' || m::text || ' yugioh ' || y::text);
+  return jsonb_build_object('pokemon_checklists', n, 'magic', m, 'yugioh', y);
+end $$;
+
+
+ALTER FUNCTION "public"."run_catalog_checks"("max_sets" integer) OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."safe_ts"("v" "text") RETURNS timestamp with time zone
@@ -2399,7 +2732,7 @@ begin
   where c.source='apitcg' and not exists (select 1 from set_links l where l.catalog_set = c.id)
   on conflict (game_id, name) do nothing;
   insert into set_links (set_id, source, catalog_set)
-  select s.id, 'apitcg', c.id from catalog_sets c join sets s on s.name = c.name
+  select s.id, 'apitcg', c.id from catalog_sets c join sets s on s.name = c.name and s.language = 'EN'
     and s.game_id = case when c.series='one-piece' then 'one-piece' else 'dragon-ball' end
   where c.source='apitcg' on conflict do nothing;
 
@@ -2475,6 +2808,99 @@ CREATE OR REPLACE FUNCTION "public"."tcgdex_variant_labels"("vd" "jsonb") RETURN
 
 
 ALTER FUNCTION "public"."tcgdex_variant_labels"("vd" "jsonb") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."tcgp_allows"("p_set" bigint, "p_number" "text", "p_variant" "text") RETURNS boolean
+    LANGUAGE "sql" STABLE SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+  select not exists (select 1 from tcgp_keys t where t.set_id = p_set)
+      or exists (select 1 from tcgp_keys t, tcgp_variant_key(p_variant) k
+                 where t.set_id = p_set and t.num = tcgp_num(p_number) and t.sub_type = k.sub_type and t.pattern = k.pattern) $$;
+
+
+ALTER FUNCTION "public"."tcgp_allows"("p_set" bigint, "p_number" "text", "p_variant" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."tcgp_norm"("t" "text") RETURNS "text"
+    LANGUAGE "sql" IMMUTABLE
+    AS $$
+  select regexp_replace(lower(translate(regexp_replace(t, '^[A-Za-z]{1,4}[0-9.]*[a-z]?:\s*', ''), 'éÉ’''&', 'ee  ')), '[^a-z0-9]+', '', 'g') $$;
+
+
+ALTER FUNCTION "public"."tcgp_norm"("t" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."tcgp_num"("n" "text") RETURNS "text"
+    LANGUAGE "sql" IMMUTABLE
+    AS $$
+  select lower(regexp_replace(split_part(coalesce(n,''), '/', 1), '^0+(?=.)', '')) $$;
+
+
+ALTER FUNCTION "public"."tcgp_num"("n" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."tcgp_our_tag"("p_name" "text", "p_variant" "text") RETURNS "text"
+    LANGUAGE "sql" IMMUTABLE
+    AS $$
+  select coalesce(string_agg(distinct x, '|' order by x), '') from (
+    select unnest(string_to_array(nullif(tcgp_promo_tag(p_name), ''), '|')) x
+    union select 'cosmos holo' where p_variant = 'Holofoil (Cosmos)'
+    union select 'cracked ice holo' where p_variant = 'Holofoil (Cracked Ice)') z $$;
+
+
+ALTER FUNCTION "public"."tcgp_our_tag"("p_name" "text", "p_variant" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."tcgp_pattern"("t" "text") RETURNS "text"
+    LANGUAGE "sql" IMMUTABLE
+    AS $_$
+  select case when t is null then '' else
+    regexp_replace(regexp_replace(lower(translate(t, 'é', 'e')), '\s*symbol pattern$|\s*pattern$', ''), '\s+', ' ', 'g') end $_$;
+
+
+ALTER FUNCTION "public"."tcgp_pattern"("t" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."tcgp_promo_tag"("t" "text") RETURNS "text"
+    LANGUAGE "sql" IMMUTABLE
+    AS $$
+  -- the product-level tags TCGplayer puts in brackets, normalised (e.g. "pokemon center exclusive|staff")
+  select coalesce(string_agg(lower(translate(m[1], 'é', 'e')), '|' order by m[1]), '')
+  from regexp_matches(coalesce(t, ''), '[\(\[]((?:pokemon center exclusive|staff|winner|prerelease|cosmos holo|cracked ice holo|league|championship|stamped)[^\)\]]*)[\)\]]', 'gi') m $$;
+
+
+ALTER FUNCTION "public"."tcgp_promo_tag"("t" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."tcgp_their_tag"("p_name" "text") RETURNS "text"
+    LANGUAGE "sql" IMMUTABLE
+    AS $$
+  select coalesce(string_agg(distinct x, '|' order by x), '') from unnest(string_to_array(nullif(tcgp_promo_tag(p_name), ''), '|')) x $$;
+
+
+ALTER FUNCTION "public"."tcgp_their_tag"("p_name" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."tcgp_variant_key"("v" "text") RETURNS TABLE("sub_type" "text", "pattern" "text")
+    LANGUAGE "sql" IMMUTABLE
+    AS $_$
+  select case when v like 'Reverse Holofoil%' then 'Reverse Holofoil' when v in ('Holofoil (Gold)', 'Holofoil (Tinsel)') then 'Holofoil' else v end,
+         case when v ~ '^Reverse Holofoil \(' then tcgp_pattern(substring(v from '\(([^)]*)\)$')) else '' end $_$;
+
+
+ALTER FUNCTION "public"."tcgp_variant_key"("v" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."tcgp_variant_label"("sub_type" "text", "pattern" "text") RETURNS "text"
+    LANGUAGE "sql" IMMUTABLE
+    AS $$
+  select case when coalesce(pattern, '') = '' then sub_type
+              else 'Reverse Holofoil (' || case pattern when 'poke ball' then 'Poké Ball' when 'energy' then 'Energy'
+                                                        else initcap(pattern) end || ')' end $$;
+
+
+ALTER FUNCTION "public"."tcgp_variant_label"("sub_type" "text", "pattern" "text") OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."trade_action"("p_id" bigint, "p_action" "text") RETURNS "text"
@@ -2561,8 +2987,8 @@ declare r record; url text; st int; ok int := 0; miss int := 0;
 begin
   perform extensions.http_set_curlopt('CURLOPT_TIMEOUT_MS', '6000');
   for r in
-    select p.id, p.image_url from products p
-    where p.game_id = 'pokemon' and p.language = 'EN' and p.kind = 'card' and p.image_url like 'https://assets.tcgdex.net/en/%'
+    select p.id, p.image_url, p.external_ids->>'tcgdex_image' tcgdex_image from products p
+    where p.game_id = 'pokemon' and p.language = 'EN' and p.kind = 'card' and (p.image_url like 'https://assets.tcgdex.net/en/%' or (p.image_url like 'https://assets.pokemon.com/%' and p.external_ids ? 'tcgdex_image'))
       and (not (p.external_ids ? 'ptcg_checked') or (p.external_ids->>'ptcg_checked') < (current_date - 30)::text)  -- misses retried monthly
     order by exists (select 1 from collection_items ci where ci.product_id = p.id) desc,
              (coalesce(nullif(substring(split_part(p.card_number,'/',1) from '^\d+$'),'')::int, 0)
@@ -2570,14 +2996,14 @@ begin
              p.id
     limit max_n
   loop
-    url := ptcg_image_url(r.image_url);
+    url := ptcg_image_url(coalesce(r.tcgdex_image, r.image_url));
     st := 0;
     if url is not null then
       begin select status into st from extensions.http(('HEAD', url, null, null, null)::extensions.http_request);
       exception when others then st := 0; end;
     end if;
     if st = 200 then
-      update products set image_url = url, external_ids = external_ids || jsonb_build_object('ptcg_checked', current_date::text, 'tcgdex_image', r.image_url) where id = r.id;
+      update products set image_url = url, external_ids = external_ids || jsonb_build_object('ptcg_checked', current_date::text, 'tcgdex_image', coalesce(r.tcgdex_image, r.image_url)) where id = r.id;
       ok := ok + 1;
     else
       update products set external_ids = external_ids || jsonb_build_object('ptcg_checked', current_date::text) where id = r.id;
@@ -3033,6 +3459,30 @@ CREATE TABLE IF NOT EXISTS "public"."catalog_fetch_log" (
 ALTER TABLE "public"."catalog_fetch_log" OWNER TO "postgres";
 
 
+CREATE OR REPLACE VIEW "public"."catalog_health" AS
+SELECT
+    NULL::"text" AS "game",
+    NULL::"text" AS "code",
+    NULL::"text" AS "name",
+    NULL::"text" AS "language",
+    NULL::"text" AS "issue",
+    NULL::integer AS "n",
+    NULL::"text" AS "detail";
+
+
+ALTER VIEW "public"."catalog_health" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."catalog_health_ignore" (
+    "set_id" bigint NOT NULL,
+    "card_number" "text" NOT NULL,
+    "reason" "text" NOT NULL
+);
+
+
+ALTER TABLE "public"."catalog_health_ignore" OWNER TO "postgres";
+
+
 CREATE TABLE IF NOT EXISTS "public"."catalog_lookup_log" (
     "product_id" bigint NOT NULL,
     "looked_up_at" timestamp with time zone DEFAULT "now"(),
@@ -3178,6 +3628,30 @@ ALTER TABLE "public"."collection_items" ALTER COLUMN "id" ADD GENERATED ALWAYS A
     CACHE 1
 );
 
+
+
+CREATE TABLE IF NOT EXISTS "public"."dbs_official" (
+    "game" "text" NOT NULL,
+    "series_id" "text" NOT NULL,
+    "card_id" "text" NOT NULL,
+    "base_id" "text" NOT NULL,
+    "name" "text"
+);
+
+
+ALTER TABLE "public"."dbs_official" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."dbs_official_series" (
+    "game" "text" NOT NULL,
+    "series_id" "text" NOT NULL,
+    "series_name" "text",
+    "loaded_at" timestamp with time zone,
+    "cards" integer
+);
+
+
+ALTER TABLE "public"."dbs_official_series" OWNER TO "postgres";
 
 
 CREATE TABLE IF NOT EXISTS "public"."ebay_auth" (
@@ -3404,6 +3878,27 @@ CREATE TABLE IF NOT EXISTS "public"."op_logo" (
 ALTER TABLE "public"."op_logo" OWNER TO "postgres";
 
 
+CREATE TABLE IF NOT EXISTS "public"."op_official" (
+    "series_id" "text" NOT NULL,
+    "series_name" "text",
+    "card_id" "text" NOT NULL,
+    "base_id" "text" NOT NULL,
+    "name" "text"
+);
+
+
+ALTER TABLE "public"."op_official" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."op_official_series" (
+    "series_id" "text" NOT NULL,
+    "name" "text"
+);
+
+
+ALTER TABLE "public"."op_official_series" OWNER TO "postgres";
+
+
 CREATE TABLE IF NOT EXISTS "public"."pcom_expansions" (
     "set_id" bigint NOT NULL,
     "page_slug" "text",
@@ -3506,6 +4001,24 @@ CREATE OR REPLACE VIEW "public"."price_v" WITH ("security_invoker"='on') AS
 
 
 ALTER VIEW "public"."price_v" OWNER TO "postgres";
+
+
+CREATE OR REPLACE VIEW "public"."product_tcgp_keys" AS
+ SELECT "p"."id",
+    "p"."set_id",
+    "p"."name",
+    "p"."card_number",
+    "p"."variant",
+    "public"."tcgp_num"("p"."card_number") AS "num",
+    "k"."sub_type",
+    "k"."pattern"
+   FROM ("public"."products" "p"
+     JOIN "public"."sets" "s" ON (("s"."id" = "p"."set_id"))),
+    LATERAL "public"."tcgp_variant_key"("p"."variant") "k"("sub_type", "pattern")
+  WHERE (("p"."kind" = 'card'::"text") AND ("p"."game_id" = 'pokemon'::"text") AND ("s"."language" = 'EN'::"text"));
+
+
+ALTER VIEW "public"."product_tcgp_keys" OWNER TO "postgres";
 
 
 ALTER TABLE "public"."products" ALTER COLUMN "id" ADD GENERATED ALWAYS AS IDENTITY (
@@ -3779,6 +4292,122 @@ ALTER TABLE "public"."sync_log" ALTER COLUMN "id" ADD GENERATED ALWAYS AS IDENTI
 
 
 
+CREATE TABLE IF NOT EXISTS "public"."tcgp_groups" (
+    "category_id" integer NOT NULL,
+    "group_id" integer NOT NULL,
+    "name" "text",
+    "abbreviation" "text",
+    "published" "date",
+    "set_id" bigint,
+    "loaded_at" timestamp with time zone,
+    "printings" integer
+);
+
+
+ALTER TABLE "public"."tcgp_groups" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."tcgp_printings" (
+    "group_id" integer NOT NULL,
+    "product_id" integer NOT NULL,
+    "sub_type" "text" NOT NULL,
+    "name" "text",
+    "number" "text",
+    "rarity" "text",
+    "image_url" "text",
+    "market" numeric,
+    "seen_at" timestamp with time zone DEFAULT "now"()
+);
+
+
+ALTER TABLE "public"."tcgp_printings" OWNER TO "postgres";
+
+
+CREATE OR REPLACE VIEW "public"."tcgp_keys" AS
+ SELECT "g"."set_id",
+    "p"."group_id",
+    "p"."product_id",
+    "p"."name",
+    "p"."number",
+    "p"."rarity",
+        CASE
+            WHEN ("x"."pat" <> ''::"text") THEN 'Reverse Holofoil'::"text"
+            ELSE "p"."sub_type"
+        END AS "sub_type",
+    "p"."image_url",
+    "p"."market",
+    "public"."tcgp_num"("p"."number") AS "num",
+    "x"."pat" AS "pattern"
+   FROM ("public"."tcgp_printings" "p"
+     JOIN "public"."tcgp_groups" "g" USING ("group_id")),
+    LATERAL ( SELECT
+                CASE
+                    WHEN (("p"."name" ~* '\((([a-z]+ )?ball( pattern)?|energy symbol pattern|team rocket)\)\s*$'::"text") AND ("p"."sub_type" = ANY (ARRAY['Reverse Holofoil'::"text", 'Holofoil'::"text"]))) THEN "public"."tcgp_pattern"("substring"("p"."name", '\(([^)]*)\)\s*$'::"text"))
+                    ELSE ''::"text"
+                END AS "pat") "x"
+  WHERE (("g"."set_id" IS NOT NULL) AND ("p"."seen_at" >= "g"."loaded_at"));
+
+
+ALTER VIEW "public"."tcgp_keys" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."tcgp_reconcile_log" (
+    "id" bigint NOT NULL,
+    "run_id" "uuid",
+    "applied" boolean,
+    "set_id" bigint,
+    "action" "text",
+    "product_id" bigint,
+    "detail" "text",
+    "at" timestamp with time zone DEFAULT "now"()
+);
+
+
+ALTER TABLE "public"."tcgp_reconcile_log" OWNER TO "postgres";
+
+
+CREATE SEQUENCE IF NOT EXISTS "public"."tcgp_reconcile_log_id_seq"
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE "public"."tcgp_reconcile_log_id_seq" OWNER TO "postgres";
+
+
+ALTER SEQUENCE "public"."tcgp_reconcile_log_id_seq" OWNED BY "public"."tcgp_reconcile_log"."id";
+
+
+
+CREATE OR REPLACE VIEW "public"."tcgp_set_fit" AS
+ SELECT "id" AS "set_id",
+    "name",
+    ( SELECT "count"(DISTINCT "o"."num") AS "count"
+           FROM "public"."product_tcgp_keys" "o"
+          WHERE ("o"."set_id" = "s"."id")) AS "our_nums",
+    ( SELECT "count"(DISTINCT "o"."num") AS "count"
+           FROM "public"."product_tcgp_keys" "o"
+          WHERE (("o"."set_id" = "s"."id") AND (EXISTS ( SELECT 1
+                   FROM "public"."tcgp_keys" "t"
+                  WHERE (("t"."set_id" = "s"."id") AND ("t"."num" = "o"."num")))))) AS "matched_nums",
+    ( SELECT "count"(DISTINCT "t"."num") AS "count"
+           FROM "public"."tcgp_keys" "t"
+          WHERE ("t"."set_id" = "s"."id")) AS "tcgp_nums",
+    (EXISTS ( SELECT 1
+           FROM "public"."tcgp_keys" "t"
+          WHERE (("t"."set_id" = "s"."id") AND ("t"."sub_type" <> ALL (ARRAY['Normal'::"text", 'Holofoil'::"text", 'Reverse Holofoil'::"text"]))))) AS "odd_subtypes",
+    (("name" ~* 'promo|misc|classic|battle academy|energ|world championship|trainer kit|jumbo|black star|nintendo|best of|pop series|futsal|mcdonald|sample|alternate|w promotional|products|collection'::"text") OR ("code" ~ '^ecard'::"text")) AS "excluded_name"
+   FROM "public"."sets" "s"
+  WHERE (("language" = 'EN'::"text") AND ("game_id" = 'pokemon'::"text") AND (EXISTS ( SELECT 1
+           FROM "public"."tcgp_keys" "t"
+          WHERE ("t"."set_id" = "s"."id"))));
+
+
+ALTER VIEW "public"."tcgp_set_fit" OWNER TO "postgres";
+
+
 CREATE TABLE IF NOT EXISTS "public"."trade_ledger" (
     "id" bigint NOT NULL,
     "owner_id" "uuid" DEFAULT "auth"."uid"() NOT NULL,
@@ -3972,6 +4601,10 @@ ALTER TABLE ONLY "public"."ask_listings" ALTER COLUMN "id" SET DEFAULT "nextval"
 
 
 
+ALTER TABLE ONLY "public"."tcgp_reconcile_log" ALTER COLUMN "id" SET DEFAULT "nextval"('"public"."tcgp_reconcile_log_id_seq"'::"regclass");
+
+
+
 ALTER TABLE ONLY "public"."_bulba_pages"
     ADD CONSTRAINT "_bulba_pages_pkey" PRIMARY KEY ("page");
 
@@ -4042,6 +4675,11 @@ ALTER TABLE ONLY "public"."catalog_fetch_log"
 
 
 
+ALTER TABLE ONLY "public"."catalog_health_ignore"
+    ADD CONSTRAINT "catalog_health_ignore_pkey" PRIMARY KEY ("set_id", "card_number");
+
+
+
 ALTER TABLE ONLY "public"."catalog_lookup_log"
     ADD CONSTRAINT "catalog_lookup_log_pkey" PRIMARY KEY ("product_id");
 
@@ -4054,6 +4692,16 @@ ALTER TABLE ONLY "public"."catalog_sets"
 
 ALTER TABLE ONLY "public"."collection_items"
     ADD CONSTRAINT "collection_items_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."dbs_official"
+    ADD CONSTRAINT "dbs_official_pkey" PRIMARY KEY ("game", "series_id", "card_id");
+
+
+
+ALTER TABLE ONLY "public"."dbs_official_series"
+    ADD CONSTRAINT "dbs_official_series_pkey" PRIMARY KEY ("game", "series_id");
 
 
 
@@ -4134,6 +4782,16 @@ ALTER TABLE ONLY "public"."offers"
 
 ALTER TABLE ONLY "public"."op_logo"
     ADD CONSTRAINT "op_logo_pkey" PRIMARY KEY ("code");
+
+
+
+ALTER TABLE ONLY "public"."op_official"
+    ADD CONSTRAINT "op_official_pkey" PRIMARY KEY ("series_id", "card_id");
+
+
+
+ALTER TABLE ONLY "public"."op_official_series"
+    ADD CONSTRAINT "op_official_series_pkey" PRIMARY KEY ("series_id");
 
 
 
@@ -4244,6 +4902,21 @@ ALTER TABLE ONLY "public"."sold_listings"
 
 ALTER TABLE ONLY "public"."sync_log"
     ADD CONSTRAINT "sync_log_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."tcgp_groups"
+    ADD CONSTRAINT "tcgp_groups_pkey" PRIMARY KEY ("group_id");
+
+
+
+ALTER TABLE ONLY "public"."tcgp_printings"
+    ADD CONSTRAINT "tcgp_printings_pkey" PRIMARY KEY ("group_id", "product_id", "sub_type");
+
+
+
+ALTER TABLE ONLY "public"."tcgp_reconcile_log"
+    ADD CONSTRAINT "tcgp_reconcile_log_pkey" PRIMARY KEY ("id");
 
 
 
@@ -4412,6 +5085,14 @@ CREATE INDEX "sold_lookup" ON "public"."sold_listings" USING "btree" ("product_i
 
 
 
+CREATE INDEX "tcgp_groups_set_idx" ON "public"."tcgp_groups" USING "btree" ("set_id");
+
+
+
+CREATE INDEX "tcgp_reconcile_log_run_idx" ON "public"."tcgp_reconcile_log" USING "btree" ("run_id");
+
+
+
 CREATE INDEX "trade_ledger_owner_id_idx" ON "public"."trade_ledger" USING "btree" ("owner_id");
 
 
@@ -4437,6 +5118,47 @@ CREATE INDEX "trade_ratings_rater_id_idx" ON "public"."trade_ratings" USING "btr
 
 
 CREATE INDEX "wants_product_id_idx" ON "public"."wants" USING "btree" ("product_id");
+
+
+
+CREATE OR REPLACE VIEW "public"."catalog_health" WITH ("security_invoker"='true') AS
+ SELECT 'pokemon'::"text" AS "game",
+    "s"."code",
+    "s"."name",
+    "s"."language",
+    'missing from official checklist'::"text" AS "issue",
+    ("count"(*))::integer AS "n",
+    "string_agg"("c"."card_number", ', '::"text" ORDER BY "c"."card_number") AS "detail"
+   FROM ("public"."set_checklist_current" "c"
+     JOIN "public"."sets" "s" ON (("s"."id" = "c"."set_id")))
+  WHERE (("s"."release_date" >= '2004-01-01'::"date") AND (NOT COALESCE("s"."hidden", false)) AND (NOT (EXISTS ( SELECT 1
+           FROM "public"."products" "p"
+          WHERE (("p"."set_id" = "c"."set_id") AND ("public"."card_key"("p"."card_number") = "public"."card_key"("c"."card_number")))))) AND (NOT (EXISTS ( SELECT 1
+           FROM "public"."catalog_health_ignore" "i"
+          WHERE (("i"."set_id" = "c"."set_id") AND ("i"."card_number" = "c"."card_number"))))))
+  GROUP BY "s"."id"
+UNION ALL
+ SELECT "k"."game_id" AS "game",
+    "s"."code",
+    "s"."name",
+    "s"."language",
+    ('fewer cards than '::"text" || "k"."source") AS "issue",
+    ("k"."expected" - "k"."ours") AS "n",
+    (("k"."ours" || ' of '::"text") || "k"."expected") AS "detail"
+   FROM ("public"."set_count_check" "k"
+     JOIN "public"."sets" "s" ON (("s"."id" = "k"."set_id")))
+  WHERE (("k"."ours" < "k"."expected") AND (NOT COALESCE("s"."hidden", false)))
+UNION ALL
+ SELECT 'pokemon'::"text" AS "game",
+    "a"."set_code" AS "code",
+    NULL::"text" AS "name",
+    NULL::"text" AS "language",
+    'unverified variant'::"text" AS "issue",
+    ("count"(*))::integer AS "n",
+    "string_agg"((("a"."card_number" || ' '::"text") || "a"."our_variant"), ', '::"text") AS "detail"
+   FROM "public"."variant_audit" "a"
+  WHERE ("a"."verdict" = 'unverified'::"text")
+  GROUP BY "a"."set_code";
 
 
 
@@ -4634,6 +5356,11 @@ ALTER TABLE ONLY "public"."sold_listings"
 
 
 
+ALTER TABLE ONLY "public"."tcgp_groups"
+    ADD CONSTRAINT "tcgp_groups_set_id_fkey" FOREIGN KEY ("set_id") REFERENCES "public"."sets"("id");
+
+
+
 ALTER TABLE ONLY "public"."trade_ledger"
     ADD CONSTRAINT "trade_ledger_owner_id_fkey" FOREIGN KEY ("owner_id") REFERENCES "auth"."users"("id") ON DELETE CASCADE;
 
@@ -4740,6 +5467,9 @@ ALTER TABLE "public"."catalog_exclusions" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."catalog_fetch_log" ENABLE ROW LEVEL SECURITY;
 
 
+ALTER TABLE "public"."catalog_health_ignore" ENABLE ROW LEVEL SECURITY;
+
+
 ALTER TABLE "public"."catalog_lookup_log" ENABLE ROW LEVEL SECURITY;
 
 
@@ -4766,6 +5496,12 @@ ALTER TABLE "public"."collection_import" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."collection_items" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."dbs_official" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."dbs_official_series" ENABLE ROW LEVEL SECURITY;
 
 
 CREATE POLICY "e_read" ON "public"."alert_events" FOR SELECT TO "authenticated" USING (("owner_id" = ( SELECT "auth"."uid"() AS "uid")));
@@ -4871,6 +5607,12 @@ ALTER TABLE "public"."offers" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."op_logo" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."op_official" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."op_official_series" ENABLE ROW LEVEL SECURITY;
 
 
 CREATE POLICY "own_cart_items" ON "public"."cart_items" TO "authenticated" USING (("owner_id" = ( SELECT "auth"."uid"() AS "uid"))) WITH CHECK (("owner_id" = ( SELECT "auth"."uid"() AS "uid")));
@@ -4986,6 +5728,15 @@ CREATE POLICY "sold_read" ON "public"."sold_listings" FOR SELECT TO "authenticat
 ALTER TABLE "public"."sync_log" ENABLE ROW LEVEL SECURITY;
 
 
+ALTER TABLE "public"."tcgp_groups" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."tcgp_printings" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."tcgp_reconcile_log" ENABLE ROW LEVEL SECURITY;
+
+
 CREATE POLICY "tp_ins" ON "public"."trade_proposals" FOR INSERT TO "authenticated" WITH CHECK ((("from_user" = ( SELECT "auth"."uid"() AS "uid")) AND ("status" = 'proposed'::"text") AND (NOT "from_done") AND (NOT "to_done") AND "public"."is_connected"("from_user", "to_user")));
 
 
@@ -5028,6 +5779,11 @@ GRANT USAGE ON SCHEMA "public" TO "postgres";
 GRANT USAGE ON SCHEMA "public" TO "anon";
 GRANT USAGE ON SCHEMA "public" TO "authenticated";
 GRANT USAGE ON SCHEMA "public" TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."add_promo_printings"("p_set" bigint, "p_apply" boolean) FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."add_promo_printings"("p_set" bigint, "p_apply" boolean) TO "service_role";
 
 
 
@@ -5160,6 +5916,12 @@ GRANT ALL ON FUNCTION "public"."check_magic_counts"() TO "service_role";
 
 
 
+GRANT ALL ON FUNCTION "public"."check_ygo_counts"() TO "anon";
+GRANT ALL ON FUNCTION "public"."check_ygo_counts"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."check_ygo_counts"() TO "service_role";
+
+
+
 GRANT ALL ON FUNCTION "public"."checklist_num_ok"("code" "text", "num" "text") TO "anon";
 GRANT ALL ON FUNCTION "public"."checklist_num_ok"("code" "text", "num" "text") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."checklist_num_ok"("code" "text", "num" "text") TO "service_role";
@@ -5233,6 +5995,11 @@ GRANT ALL ON FUNCTION "public"."fill_dbs_masters_pack_images"("max_n" integer) T
 
 
 
+REVOKE ALL ON FUNCTION "public"."fill_dbs_official"("p_game" "text", "p_series" "text") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."fill_dbs_official"("p_game" "text", "p_series" "text") TO "service_role";
+
+
+
 GRANT ALL ON FUNCTION "public"."fill_dbs_pack_images"() TO "anon";
 GRANT ALL ON FUNCTION "public"."fill_dbs_pack_images"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."fill_dbs_pack_images"() TO "service_role";
@@ -5251,6 +6018,12 @@ GRANT ALL ON FUNCTION "public"."fill_onepiece_pack_images"("max_n" integer) TO "
 
 
 
+GRANT ALL ON FUNCTION "public"."fill_op_official"("p_series" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."fill_op_official"("p_series" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."fill_op_official"("p_series" "text") TO "service_role";
+
+
+
 GRANT ALL ON FUNCTION "public"."fill_series_logos"() TO "anon";
 GRANT ALL ON FUNCTION "public"."fill_series_logos"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."fill_series_logos"() TO "service_role";
@@ -5260,6 +6033,11 @@ GRANT ALL ON FUNCTION "public"."fill_series_logos"() TO "service_role";
 GRANT ALL ON FUNCTION "public"."fill_tcgdex_logos"("max_n" integer) TO "anon";
 GRANT ALL ON FUNCTION "public"."fill_tcgdex_logos"("max_n" integer) TO "authenticated";
 GRANT ALL ON FUNCTION "public"."fill_tcgdex_logos"("max_n" integer) TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."fill_tcgp_group"("p_group" integer) FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."fill_tcgp_group"("p_group" integer) TO "service_role";
 
 
 
@@ -5332,6 +6110,16 @@ GRANT ALL ON FUNCTION "public"."jp_norm"("t" "text") TO "service_role";
 GRANT ALL ON FUNCTION "public"."limitless_jp_url"("p_code" "text", "p_num" "text") TO "anon";
 GRANT ALL ON FUNCTION "public"."limitless_jp_url"("p_code" "text", "p_num" "text") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."limitless_jp_url"("p_code" "text", "p_num" "text") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."list_dbs_official_series"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."list_dbs_official_series"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."list_tcgp_groups"("p_category" integer) FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."list_tcgp_groups"("p_category" integer) TO "service_role";
 
 
 
@@ -5453,6 +6241,11 @@ GRANT ALL ON FUNCTION "public"."probe_ptcg_alt"("p_batch" integer) TO "service_r
 
 
 
+REVOKE ALL ON FUNCTION "public"."product_in_use"("p" bigint) FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."product_in_use"("p" bigint) TO "service_role";
+
+
+
 GRANT ALL ON FUNCTION "public"."products_special"() TO "anon";
 GRANT ALL ON FUNCTION "public"."products_special"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."products_special"() TO "service_role";
@@ -5483,6 +6276,17 @@ GRANT ALL ON FUNCTION "public"."public_binder"("p_token" "text") TO "service_rol
 
 
 
+REVOKE ALL ON FUNCTION "public"."reconcile_set_with_tcgp"("p_set" bigint, "p_apply" boolean) FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."reconcile_set_with_tcgp"("p_set" bigint, "p_apply" boolean) TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."refresh_card_images"() TO "anon";
+GRANT ALL ON FUNCTION "public"."refresh_card_images"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."refresh_card_images"() TO "service_role";
+
+
+
 GRANT ALL ON FUNCTION "public"."refresh_fx"() TO "anon";
 GRANT ALL ON FUNCTION "public"."refresh_fx"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."refresh_fx"() TO "service_role";
@@ -5498,6 +6302,12 @@ GRANT ALL ON FUNCTION "public"."refresh_set_covers"() TO "service_role";
 GRANT ALL ON FUNCTION "public"."reverse_pattern_label"("foil" "text") TO "anon";
 GRANT ALL ON FUNCTION "public"."reverse_pattern_label"("foil" "text") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."reverse_pattern_label"("foil" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."run_catalog_checks"("max_sets" integer) TO "anon";
+GRANT ALL ON FUNCTION "public"."run_catalog_checks"("max_sets" integer) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."run_catalog_checks"("max_sets" integer) TO "service_role";
 
 
 
@@ -5612,6 +6422,59 @@ GRANT ALL ON FUNCTION "public"."sync_tick"("max_sets" integer) TO "service_role"
 GRANT ALL ON FUNCTION "public"."tcgdex_variant_labels"("vd" "jsonb") TO "anon";
 GRANT ALL ON FUNCTION "public"."tcgdex_variant_labels"("vd" "jsonb") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."tcgdex_variant_labels"("vd" "jsonb") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."tcgp_allows"("p_set" bigint, "p_number" "text", "p_variant" "text") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."tcgp_allows"("p_set" bigint, "p_number" "text", "p_variant" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."tcgp_norm"("t" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."tcgp_norm"("t" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."tcgp_norm"("t" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."tcgp_num"("n" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."tcgp_num"("n" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."tcgp_num"("n" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."tcgp_our_tag"("p_name" "text", "p_variant" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."tcgp_our_tag"("p_name" "text", "p_variant" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."tcgp_our_tag"("p_name" "text", "p_variant" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."tcgp_pattern"("t" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."tcgp_pattern"("t" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."tcgp_pattern"("t" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."tcgp_promo_tag"("t" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."tcgp_promo_tag"("t" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."tcgp_promo_tag"("t" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."tcgp_their_tag"("p_name" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."tcgp_their_tag"("p_name" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."tcgp_their_tag"("p_name" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."tcgp_variant_key"("v" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."tcgp_variant_key"("v" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."tcgp_variant_key"("v" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."tcgp_variant_label"("sub_type" "text", "pattern" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."tcgp_variant_label"("sub_type" "text", "pattern" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."tcgp_variant_label"("sub_type" "text", "pattern" "text") TO "service_role";
 
 
 
@@ -5799,6 +6662,18 @@ GRANT ALL ON TABLE "public"."catalog_fetch_log" TO "service_role";
 
 
 
+GRANT ALL ON TABLE "public"."catalog_health" TO "anon";
+GRANT ALL ON TABLE "public"."catalog_health" TO "authenticated";
+GRANT ALL ON TABLE "public"."catalog_health" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."catalog_health_ignore" TO "anon";
+GRANT ALL ON TABLE "public"."catalog_health_ignore" TO "authenticated";
+GRANT ALL ON TABLE "public"."catalog_health_ignore" TO "service_role";
+
+
+
 GRANT ALL ON TABLE "public"."catalog_lookup_log" TO "anon";
 GRANT ALL ON TABLE "public"."catalog_lookup_log" TO "authenticated";
 GRANT ALL ON TABLE "public"."catalog_lookup_log" TO "service_role";
@@ -5843,6 +6718,14 @@ GRANT ALL ON TABLE "public"."collection_import" TO "service_role";
 GRANT ALL ON SEQUENCE "public"."collection_items_id_seq" TO "anon";
 GRANT ALL ON SEQUENCE "public"."collection_items_id_seq" TO "authenticated";
 GRANT ALL ON SEQUENCE "public"."collection_items_id_seq" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."dbs_official" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."dbs_official_series" TO "service_role";
 
 
 
@@ -5956,6 +6839,18 @@ GRANT ALL ON TABLE "public"."op_logo" TO "service_role";
 
 
 
+GRANT ALL ON TABLE "public"."op_official" TO "anon";
+GRANT ALL ON TABLE "public"."op_official" TO "authenticated";
+GRANT ALL ON TABLE "public"."op_official" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."op_official_series" TO "anon";
+GRANT ALL ON TABLE "public"."op_official_series" TO "authenticated";
+GRANT ALL ON TABLE "public"."op_official_series" TO "service_role";
+
+
+
 GRANT ALL ON TABLE "public"."pcom_expansions" TO "anon";
 GRANT ALL ON TABLE "public"."pcom_expansions" TO "authenticated";
 GRANT ALL ON TABLE "public"."pcom_expansions" TO "service_role";
@@ -5989,6 +6884,10 @@ GRANT ALL ON SEQUENCE "public"."price_alerts_id_seq" TO "service_role";
 GRANT ALL ON TABLE "public"."price_v" TO "anon";
 GRANT ALL ON TABLE "public"."price_v" TO "authenticated";
 GRANT ALL ON TABLE "public"."price_v" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."product_tcgp_keys" TO "service_role";
 
 
 
@@ -6103,6 +7002,32 @@ GRANT ALL ON TABLE "public"."sync_log" TO "service_role";
 GRANT ALL ON SEQUENCE "public"."sync_log_id_seq" TO "anon";
 GRANT ALL ON SEQUENCE "public"."sync_log_id_seq" TO "authenticated";
 GRANT ALL ON SEQUENCE "public"."sync_log_id_seq" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."tcgp_groups" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."tcgp_printings" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."tcgp_keys" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."tcgp_reconcile_log" TO "service_role";
+
+
+
+GRANT ALL ON SEQUENCE "public"."tcgp_reconcile_log_id_seq" TO "anon";
+GRANT ALL ON SEQUENCE "public"."tcgp_reconcile_log_id_seq" TO "authenticated";
+GRANT ALL ON SEQUENCE "public"."tcgp_reconcile_log_id_seq" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."tcgp_set_fit" TO "service_role";
 
 
 
