@@ -9,7 +9,7 @@ const withImage = url => db => { for (const t of [db.products, db.catalog_v]) t.
 
 // Image hosts answer from here, so the tests check which file the app asks for, not the network
 test.beforeEach(async ({ page }) => {
-  await page.route(/^https:\/\/(dz3we2x72f7ol\.cloudfront\.net|cards\.scryfall\.io|images\.pokemontcg\.io)\//,
+  await page.route(/^https:\/\/(dz3we2x72f7ol\.cloudfront\.net|cards\.scryfall\.io|images\.pokemontcg\.io|assets\.tcgdex\.net|tcgplayer-cdn\.tcgplayer\.com|limitlesstcg\.[^/]+)\//,
     r => r.fulfill({ status: 200, contentType: "image/png", body: PNG }));
 });
 
@@ -46,4 +46,25 @@ test("Scryfall card: card page uses the large image", async ({ page }) => {
   await tab(page, "My collection");
   await tileOf(page, "Charizard").locator(".name").click();
   await expect(page.locator("#heroimg")).toHaveAttribute("src", normal.replace("/normal/", "/large/"));
+});
+
+test("small tiles use the lighter file and switch back when tiles are made large", async ({ page }) => {
+  const hires = "https://images.pokemontcg.io/me2/50_hires.png", small = "https://images.pokemontcg.io/me2/50.png";
+  await open(page, { mutate: withImage(hires) });
+  await tab(page, "My collection");
+  const img = tileOf(page, "Charizard").locator("img").first();
+  await expect(img).toHaveAttribute("src", hires);                    // large tiles (default): full image
+  await page.locator("#sizebtn").click();
+  await expect(img).toHaveAttribute("src", small);                    // small tiles: lighter file
+  await page.locator("#sizebtn").click();
+  await expect(img).toHaveAttribute("src", hires);
+});
+
+test("list thumbnails use the lighter file, with the stored image as fallback", async ({ page }) => {
+  const hi = "https://assets.tcgdex.net/en/me/me02/050/high.webp";
+  await open(page, { mutate: withImage(hi) });
+  await tab(page, "Carts");
+  const thumb = page.locator(".line img").first();
+  await expect(thumb).toHaveAttribute("src", "https://assets.tcgdex.net/en/me/me02/050/low.webp");
+  await expect(thumb).toHaveAttribute("data-fb", hi);
 });
