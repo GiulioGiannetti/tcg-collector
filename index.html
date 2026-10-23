@@ -278,6 +278,16 @@ body{padding-bottom:calc(86px + env(safe-area-inset-bottom,0px))}
 .grab{display:flex;justify-content:center;padding:8px 0 10px;cursor:grab;touch-action:none}.grab span{width:46px;height:5px;border-radius:3px;background:#3A4855}
 #fscrim{display:none;position:fixed;inset:0;z-index:44;background:rgba(5,8,11,.5)}
 body.fsheet #fscrim{display:block}
+.dhead{display:none}
+/* desktop: filters open as a centred panel, like the Series / Sets pickers */
+@media (min-width:700px){
+  .drawer{top:50%;bottom:auto;left:50%;right:auto;margin:0;width:min(900px,calc(100vw - 32px));max-height:82vh;border:1px solid var(--line);border-radius:16px;padding:12px 16px 16px;
+    transform:translate(-50%,-48%);opacity:0;transition:opacity .16s ease,transform .16s ease,visibility 0s .16s;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+  .drawer.open{transform:translate(-50%,-50%);opacity:1;max-height:82vh;transition:opacity .16s ease,transform .16s ease}
+  .drawer .grab{display:none}
+  .dhead{display:flex;margin-bottom:6px}
+  body.fsheet #fscrim{background:rgba(5,8,11,.62)}
+}
 .selbar{bottom:calc(68px + env(safe-area-inset-bottom,0px))}
 .tools{flex-wrap:nowrap;align-items:stretch;gap:6px}
 .tools .search{flex:1 1 auto;min-width:0}
@@ -528,14 +538,14 @@ async function boot(){
     + '<option value="value">Highest value</option><option value="newest">Newest set</option><option value="oldest">Oldest set</option><option value="set">Set &amp; number</option>'
     + '<option value="num">Card number: low to high</option><option value="-num">Card number: high to low</option>'
     + '<option value="added">Recently added</option><option value="qty">Most copies</option></select></div><div class="ownrow"><div class="ownchips" id="ownchips"><button type="button" class="chip own" data-o="owned">Owned</button><button type="button" class="chip nown" data-o="missing">Not owned</button></div><span id="sizeslot"></span></div>'
-    + '<div class="drawer" id="drawer"><div class="grab" aria-hidden="true"><span></span></div><div class="row"><span>Game</span><div class="msel" id="g"></div></div><div class="row" id="l"><span>Language</span></div>'
+    + '<div class="drawer" id="drawer" role="dialog" aria-label="Filters"><div class="grab" aria-hidden="true"><span></span></div><div class="fpop-h dhead"><h3>Filters</h3><button type="button" class="fclose" id="dclose" aria-label="Close filters">×</button></div><div class="row"><span>Game</span><div class="msel" id="g"></div></div><div class="row" id="l"><span>Language</span></div>'
     + '<div class="row" id="k"><span>Type</span></div><div class="row"><span>Series</span><div class="msel" id="ser"></div></div>'
     + '<div class="row"><span>Sets</span><div class="msel" id="set"></div></div><div class="row"><span>Card type</span><div class="msel" id="spc"></div></div><div class="row"><span>Quality</span><div class="msel" id="qgrid"></div><select id="qual" aria-label="Quality" hidden></select></div><div class="row" id="o"><span>Owned</span></div><div class="row" id="mk"><span>Market</span></div><div class="row"><span></span><button class="chip" id="reset">Clear filters</button></div></div></div>'
     + '<div class="summary" id="sum"></div></header><div id="pages"><div class="grid" id="grid"></div><div id="more"></div><div id="cartview"></div><div id="investview"></div><div id="friendsview"></div></div>';
   $("out").onclick = () => sb.auth.signOut();
   $("bell").onclick = openAlerts; $("setbtn").onclick = openSettings;
   document.querySelectorAll(".seg button").forEach(b => b.onclick = () => { if (st.selecting) endSelect(); setDrawer(false); st.tab = b.dataset.t; st.shown = STEP; render(true); window.scrollTo(0, 0); });
-  $("ftoggle").onclick = () => setDrawer(!st.drawer); bindGestures();
+  $("ftoggle").onclick = () => setDrawer(!st.drawer); $("dclose").onclick = () => setDrawer(false); bindGestures();
   chips("l", [["all","All"],["EN","English"],["JP","Japanese"]], () => st.lang, v => { st.lang = v; st.seriesIds = []; st.setIds = []; });
   chips("o", [["all","All"],["owned","Owned"],["missing","Not owned"]], () => st.owned, v => st.owned = v);
   document.querySelectorAll("#ownchips .chip").forEach(b => b.onclick = () => { st.owned = ownToggle(b.dataset.o); st.shown = STEP; render(true); });
@@ -2443,7 +2453,7 @@ function renderCarts(){
     toast("Done — your collection has been updated"); render(false);
   };
 }
-$("scrim").onclick = closeSheet; document.addEventListener("keydown", e => { if (e.key === "Escape") closeSheet(); });
+$("scrim").onclick = closeSheet; document.addEventListener("keydown", e => { if (e.key === "Escape") { closeSheet(); if (st.drawer && !document.querySelector(".fpop-scrim")) setDrawer(false); } });
 init();
 </script>
 </body>
