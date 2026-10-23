@@ -443,6 +443,65 @@ body.tiles-s .k-sealed .art{padding:5px}
 :root[data-theme="light"] .k-sealed .art img{box-shadow:none;filter:drop-shadow(0 4px 8px rgba(0,0,0,.18))}
 .askb{display:inline-block;font-style:italic;font-weight:800;font-size:9.5px;letter-spacing:.06em;padding:0 4px;margin-right:4px;border-radius:5px;border:1px dashed var(--muted);color:var(--muted);vertical-align:1px}
 .askv,.price .v.askv{color:var(--muted);font-style:italic}
+/* ---- section tabs sit in the header, between the Pullfolio bar and the page title ---- */
+body{padding-bottom:calc(20px + env(safe-area-inset-bottom,0px))}
+.seg,:root[data-theme="light"] .seg{position:static;display:flex;gap:4px;margin:12px 0 4px;padding:4px;border:1px solid var(--line);border-radius:14px;background:var(--panel);overflow-x:auto;scrollbar-width:none}
+.seg::-webkit-scrollbar{display:none}
+.seg button{flex:1 1 0;min-width:0;display:flex;flex-direction:row;align-items:center;justify-content:center;gap:8px;height:42px;padding:0 12px;border-radius:10px;color:var(--muted);white-space:nowrap;transition:background .15s,color .15s}
+.seg button:hover{color:var(--ink);background:var(--tile)}
+.seg button svg{width:18px;height:18px;flex:0 0 auto}
+.seg .tl{font-size:14px;font-weight:700;letter-spacing:0;line-height:1}
+.seg button[aria-selected="true"]{background:var(--tile-hi);color:var(--ink);box-shadow:inset 0 0 0 1px var(--line)}
+.seg button[aria-selected="true"] svg{color:var(--amber)}
+.seg .badge{position:static;margin:0 0 0 2px}
+.selbar{bottom:calc(8px + env(safe-area-inset-bottom,0px))}
+@media (max-width:600px){
+  .seg{gap:2px;padding:3px}
+  .seg button{flex-direction:column;gap:3px;height:50px;padding:0 2px}
+  .seg button svg{width:20px;height:20px}
+  .seg .tl{font-size:11px}
+  .seg .badge{position:absolute;top:3px;left:57%;margin:0}
+}
+/* ---- filter panel ---- */
+.drawer{display:flex!important;flex-direction:column;gap:0;padding:0!important;overflow:hidden!important}
+.drawer.open{overflow:hidden}
+.drawer .dhead{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0;padding:16px 20px 14px;border-bottom:1px solid var(--line)}
+.dhead h3{margin:0;font-family:"Sora",sans-serif;font-size:18px;font-weight:700;letter-spacing:-.2px}
+.dsub{display:block;margin-top:3px;font-size:12.5px;color:var(--muted)}
+.drawer .fclose{width:34px;height:34px;font-size:20px;display:grid;place-items:center}
+.dbody{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:4px 20px 8px}
+.fsec{padding:14px 0 6px}
+.fsec+.fsec{border-top:1px solid var(--line)}
+.fsec h4{margin:0 0 6px;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.frow{display:grid;grid-template-columns:104px minmax(0,1fr);align-items:center;gap:14px;padding:6px 0}
+.frow[hidden]{display:none}
+.flabel{font-size:13.5px;font-weight:600;color:var(--ink)}
+.frow .msel{flex:none;width:100%;max-width:none}
+.frow .mbtn{min-height:42px;align-items:center;padding:8px 12px;border-radius:10px;font-size:14px;color:var(--ink);transition:border-color .15s,box-shadow .15s}
+.frow .mbtn:hover{border-color:var(--muted)}
+.frow .mbtn:focus-visible{outline:none;border-color:var(--amber);box-shadow:0 0 0 3px rgba(255,181,71,.25)}
+.mchev{flex:0 0 auto;width:16px;height:16px;color:var(--muted)}
+.segc{display:inline-flex;max-width:100%;gap:2px;padding:3px;background:var(--tile);border:1px solid var(--line);border-radius:10px;justify-self:start}
+.segc .chip{border:0;background:none;border-radius:7px;padding:7px 14px;font-size:13px;font-weight:600;color:var(--muted);white-space:nowrap;transition:background .15s,color .15s}
+.segc .chip:hover{color:var(--ink)}
+.segc .chip[aria-pressed="true"]{background:var(--amber);color:var(--amber-ink);box-shadow:0 1px 4px rgba(0,0,0,.2)}
+.dfoot{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 20px;border-top:1px solid var(--line);background:var(--panel)}
+.dclear{background:none;border:0;padding:10px 2px;color:var(--ink);font:inherit;font-size:14px;font-weight:700;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.dclear:disabled{color:var(--muted);text-decoration:none;opacity:.55;cursor:default}
+.dapply{background:var(--amber);color:var(--amber-ink);border:0;border-radius:10px;padding:11px 24px;font:inherit;font-size:14px;font-weight:800;cursor:pointer;box-shadow:0 4px 14px rgba(255,159,67,.25)}
+.dapply:hover{filter:brightness(1.05)}
+@media (min-width:700px){
+  .drawer{width:min(620px,calc(100vw - 32px))}
+  .drawer .grab{display:none}
+}
+@media (max-width:699px){
+  .drawer .dhead{padding:0 16px 12px}
+  .dbody{padding:2px 16px 8px}
+  .frow{grid-template-columns:1fr;gap:7px;padding:7px 0}
+  .segc{display:flex;width:100%;justify-self:stretch}.segc .chip{flex:1;padding:9px 6px}
+  .dfoot{padding:12px 16px calc(12px + env(safe-area-inset-bottom,0px))}
+  .dapply{flex:1}
+}
 </style>
 </head>
 <body>
@@ -530,14 +589,22 @@ async function boot(){
     + '<option value="value">Highest value</option><option value="newest">Newest set</option><option value="oldest">Oldest set</option><option value="set">Set &amp; number</option>'
     + '<option value="num">Card number: low to high</option><option value="-num">Card number: high to low</option>'
     + '<option value="added">Recently added</option><option value="qty">Most copies</option></select></div><div class="ownrow"><div class="ownchips" id="ownchips"><button type="button" class="chip own" data-o="owned">Owned</button><button type="button" class="chip nown" data-o="missing">Not owned</button></div><span id="sizeslot"></span></div>'
-    + '<div class="drawer" id="drawer" role="dialog" aria-label="Filters"><div class="grab" aria-hidden="true"><span></span></div><div class="fpop-h dhead"><h3>Filters</h3><button type="button" class="fclose" id="dclose" aria-label="Close filters">×</button></div><div class="row"><span>Game</span><div class="msel" id="g"></div></div><div class="row" id="l"><span>Language</span></div>'
-    + '<div class="row" id="k"><span>Type</span></div><div class="row"><span>Series</span><div class="msel" id="ser"></div></div>'
-    + '<div class="row"><span>Sets</span><div class="msel" id="set"></div></div><div class="row"><span>Card type</span><div class="msel" id="spc"></div></div><div class="row"><span>Quality</span><div class="msel" id="qgrid"></div><select id="qual" aria-label="Quality" hidden></select></div><div class="row" id="o"><span>Owned</span></div><div class="row" id="mk"><span>Market</span></div><div class="row"><span></span><button class="chip" id="reset">Clear filters</button></div></div></div>'
+    + '<div class="drawer" id="drawer" role="dialog" aria-label="Filters"><div class="grab" aria-hidden="true"><span></span></div>'
+    + '<div class="dhead"><div><h3>Filters</h3><span class="dsub" id="dsub"></span></div><button type="button" class="fclose" id="dclose" aria-label="Close filters">×</button></div>'
+    + '<div class="dbody"><section class="fsec"><h4>What to show</h4>'
+    + '<div class="frow"><span class="flabel">Game</span><div class="msel" id="g"></div></div><div class="frow"><span class="flabel">Series</span><div class="msel" id="ser"></div></div>'
+    + '<div class="frow"><span class="flabel">Sets</span><div class="msel" id="set"></div></div><div class="frow"><span class="flabel">Card type</span><div class="msel" id="spc"></div></div></section>'
+    + '<section class="fsec"><h4>Details</h4><div class="frow"><span class="flabel">Language</span><div class="segc" id="l" role="group" aria-label="Language"></div></div>'
+    + '<div class="frow"><span class="flabel">Type</span><div class="segc" id="k" role="group" aria-label="Type"></div></div>'
+    + '<div class="frow"><span class="flabel">Quality</span><div class="msel" id="qgrid"></div><select id="qual" aria-label="Quality" hidden></select></div>'
+    + '<div class="frow" hidden><span class="flabel">Owned</span><div class="segc" id="o" role="group" aria-label="Owned"></div></div>'
+    + '<div class="frow"><span class="flabel">Market</span><div class="segc" id="mk" role="group" aria-label="Market"></div></div></section></div>'
+    + '<div class="dfoot"><button type="button" class="dclear" id="reset">Clear all</button><button type="button" class="dapply" id="dapply">Show results</button></div></div></div>'
     + '<div class="summary" id="sum"></div></header><div id="pages"><div class="grid" id="grid"></div><div id="more"></div><div id="cartview"></div><div id="investview"></div><div id="friendsview"></div></div>';
   $("out").onclick = () => sb.auth.signOut();
   $("bell").onclick = openAlerts; $("setbtn").onclick = openSettings;
   document.querySelectorAll(".seg button").forEach(b => b.onclick = () => { if (st.selecting) endSelect(); setDrawer(false); st.tab = b.dataset.t; st.shown = STEP; render(true); window.scrollTo(0, 0); });
-  $("ftoggle").onclick = () => setDrawer(!st.drawer); $("dclose").onclick = () => setDrawer(false); bindGestures();
+  $("ftoggle").onclick = () => setDrawer(!st.drawer); $("dclose").onclick = $("dapply").onclick = () => setDrawer(false); bindGestures();
   chips("l", [["all","All"],["EN","English"],["JP","Japanese"]], () => st.lang, v => { st.lang = v; st.seriesIds = []; st.setIds = []; });
   chips("o", [["all","All"],["owned","Owned"],["missing","Not owned"]], () => st.owned, v => st.owned = v);
   document.querySelectorAll("#ownchips .chip").forEach(b => b.onclick = () => { st.owned = ownToggle(b.dataset.o); st.shown = STEP; render(true); });
@@ -595,6 +662,8 @@ function syncLayers(){
   $("qual").value = st.quality; renderQgrid();
   const n = [st.games.length > 0, st.lang !== "all", st.kind !== "all", st.seriesIds.length > 0, st.setIds.length > 0, st.specials.length > 0, !!st.quality, st.tab === "collection" && st.market !== "all"].filter(Boolean).length;
   $("fcount").innerHTML = n ? '<span class="badge">' + n + '</span>' : "";
+  $("dsub").textContent = n ? n + " filter" + (n === 1 ? "" : "s") + " applied" : "Showing everything";
+  $("reset").disabled = !n;
 }
 // ---------- settings: region + eBay link behaviour ----------
 const REGIONS = { AU:{ name:"Australia", host:"www.ebay.com.au" }, US:{ name:"United States", host:"www.ebay.com" }, UK:{ name:"United Kingdom", host:"www.ebay.co.uk" }, CA:{ name:"Canada", host:"www.ebay.ca" } };
@@ -656,7 +725,7 @@ function vsel(id, label, opts, sel, onChange, single, emptyLabel){
   const lcls = picked.length === 1 ? "n1" : picked.length === 2 ? "n2" : picked.length <= 4 ? "n3" : "nm";
   const shown = sel.length === 0 ? '<span>' + esc(summary) + '</span>'
     : '<span class="mlogos ' + lcls + '">' + picked.slice(0, 8).map(o => o.logo ? '<img alt="' + esc(o.name) + '" title="' + esc(o.name) + '" src="' + esc(o.logo) + '"' + (/scryfall\.io\/sets/.test(o.logo) ? ' class="sym"' : "") + ' onerror="this.replaceWith(Object.assign(document.createElement(\'span\'),{className:\'mtxt\',textContent:this.alt}))">' : '<span class="mtxt">' + esc(o.name) + '</span>').join("") + (more ? '<span class="mtxt">+' + more + ' more</span>' : "") + '</span>';
-  box.innerHTML = '<button type="button" class="mbtn" aria-haspopup="dialog" aria-label="' + esc(label + ": " + summary) + '">' + shown + '<span aria-hidden="true">▾</span></button>';
+  box.innerHTML = '<button type="button" class="mbtn" aria-haspopup="dialog" aria-label="' + esc(label + ": " + summary) + '">' + shown + '<svg class="mchev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>';
   box.querySelector(".mbtn").onclick = () => {
     let cur = sel.slice();
     const pop = document.createElement("div"); pop.className = "fpop-scrim";
@@ -734,7 +803,7 @@ function goTab(dir){
 }
 function bindGestures(){
   if (window.__gest) return; window.__gest = true;
-  document.body.appendChild(document.querySelector(".seg")); document.body.appendChild($("drawer"));   // out of the sticky header so they layer correctly
+  document.body.appendChild($("drawer"));   // out of the sticky header so it layers correctly
   const fs = document.createElement("div"); fs.id = "fscrim"; fs.onclick = () => { setDrawer(false); setSortSheet(false); }; document.body.appendChild(fs);
   const pt = document.createElement("div"); pt.id = "ptitle"; pt.className = "ptitle"; document.querySelector("header").insertBefore(pt, $("browse")); setTitle();
   let t0 = null;
@@ -751,7 +820,7 @@ function bindGestures(){
 function bindSheetDrag(d, isOpen, close){
   let g = null;
   d.addEventListener("touchstart", e => { if (!isOpen() || e.touches.length !== 1) return;
-    if (!e.target.closest(".grab") && (d.scrollTop > 0 || e.target.closest("input,select,.mbtn,.chip"))) return;
+    if (!e.target.closest(".grab") && ((d.querySelector(".dbody") || d).scrollTop > 0 || e.target.closest("input,select,button"))) return;
     g = { y:e.touches[0].clientY, dy:0 }; d.style.transition = "none"; }, { passive:true });
   d.addEventListener("touchmove", e => { if (!g) return; g.dy = Math.max(0, e.touches[0].clientY - g.y); d.style.transform = "translateY(" + g.dy + "px)"; }, { passive:true });
   d.addEventListener("touchend", () => { if (!g) return; const shut = g.dy > 80; g = null; d.style.transition = ""; if (shut) close(); else d.style.transform = ""; });
@@ -1336,7 +1405,7 @@ function render(reset){
   $("friendsview").style.display = t === "friends" ? "" : "none";
   if (t === "carts") return renderCarts();
   if (t === "friends") return renderFriends();
-  ["l","k","o","mk"].forEach(id => $(id)._sync()); $("o").style.display = "none"; $("ownchips").style.display = t === "catalog" ? "" : "none"; syncOwnChips(); $("sizeslot").innerHTML = sizeBtn(); bindSizeBtn(); $("mk").style.display = t === "collection" ? "" : "none"; syncLayers(); $("sort").value = st.sort;
+  ["l","k","o","mk"].forEach(id => $(id)._sync()); $("o").style.display = "none"; $("ownchips").style.display = t === "catalog" ? "" : "none"; syncOwnChips(); $("sizeslot").innerHTML = sizeBtn(); bindSizeBtn(); $("mk").closest(".frow").hidden = t !== "collection"; syncLayers(); $("sort").value = st.sort;
   if (t === "invest") return renderInvest();
   st.tab === "collection" ? renderCollection() : renderCatalog(reset);
 }

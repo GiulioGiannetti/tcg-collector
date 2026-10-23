@@ -29,14 +29,44 @@ test("desktop: Escape in the Series picker closes only the picker", async ({ pag
   await expect(page.locator("#drawer")).toHaveClass(/open/);
 });
 
-test("phone: Filters stays a bottom sheet without the desktop header", async ({ page }) => {
+test("phone: Filters is a bottom sheet with a title, and Show results closes it", async ({ page }) => {
   await page.setViewportSize({ width: 420, height: 860 });
   await open(page, {});
   await page.locator("#ftoggle").click();
   await page.waitForTimeout(350);
-  await expect(page.locator(".dhead")).toBeHidden();
+  await expect(page.locator(".dhead h3")).toHaveText("Filters");
   const box = await page.locator("#drawer").boundingBox();
   expect(Math.round(box.y + box.height)).toBe(860);   // anchored to the bottom edge
+  await page.locator("#dapply").click();
+  await expect(page.locator("#drawer")).not.toHaveClass(/open/);
+});
+
+test("filter panel footer: Clear all is off until a filter is set, then clears everything", async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 860 });
+  await open(page, {});
+  await page.locator("#ftoggle").click();
+  await expect(page.locator("#dsub")).toHaveText("Showing everything");
+  await expect(page.locator("#reset")).toBeDisabled();
+  await page.locator("#l .chip", { hasText: "Japanese" }).click();
+  await expect(page.locator("#dsub")).toHaveText("1 filter applied");
+  await expect(page.locator("#l .chip", { hasText: "Japanese" })).toHaveAttribute("aria-pressed", "true");
+  await page.locator("#reset").click();
+  await expect(page.locator("#dsub")).toHaveText("Showing everything");
+  await expect(page.locator("#l .chip", { hasText: "All" })).toHaveAttribute("aria-pressed", "true");
+});
+
+test("section tabs sit in the header, between the Pullfolio bar and the page title", async ({ page }) => {
+  for (const [w, h] of [[1366, 860], [390, 844]]) {
+    await page.setViewportSize({ width: w, height: h });
+    await open(page, {});
+    const bar = await page.locator("header .bar").boundingBox();
+    const tabs = await page.locator("header .seg").boundingBox();
+    const title = await page.locator("#ptitle").boundingBox();
+    expect(tabs.y).toBeGreaterThanOrEqual(bar.y + bar.height);
+    expect(title.y).toBeGreaterThanOrEqual(tabs.y + tabs.height);
+    await tab(page, "Catalog");
+    await expect(page.locator("#ptitle")).toContainText("Catalog");
+  }
 });
 
 test("Card type opens the same tile popup as Series and Sets, and filters on Done", async ({ page }) => {
