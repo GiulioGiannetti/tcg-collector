@@ -691,6 +691,8 @@ const yr = d => d ? String(d).slice(0, 4) : "";
 const setLabel = s => !s.name ? "" : s.language === "JP" && !/\(JP\)/.test(s.name) ? s.name + " (JP)" : s.name;
 
 // ---------- full-screen card viewer (tap to zoom, drag/scroll to pan) ----------
+// tcg.pokemon.com publishes each card at 330×460 and 660×920 (-2x); grids use the first, the card page the second
+const hiRes = u => /^https:\/\/dz3we2x72f7ol\.cloudfront\.net\/.+(?<!-2x)\.png$/.test(u || "") ? u.replace(/\.png$/, "-2x.png") : u;
 function openViewer(src, alt){
   const v = document.createElement("div"); v.className = "viewer"; v.setAttribute("role", "dialog"); v.setAttribute("aria-modal", "true");
   v.innerHTML = '<button class="fclose" aria-label="Close">×</button><div class="vscroll"><img alt="' + esc(alt || "") + '" src="' + esc(src) + '"></div><div class="vhint">Tap the card to zoom</div>';
@@ -1460,7 +1462,7 @@ async function openSheet(p, keepQ){
     return c.quantity + " × " + esc(COND[c.condition] || c.condition) + (c.grade ? " · " + esc(c.grade) : "") + " — "
       + (pr != null ? money(pr) + " each" : a ? '<span class="askv" title="' + esc(ASK_TIP) + '">' + ASK_BADGE + 'Asking price ' + askText(a, " each") + '</span>' : PRICE_FALLBACK_ASKING ? "no price yet" : "no sold data yet"); }).join("<br>");
   $("sheet").innerHTML = '<button class="close" id="x" aria-label="Close">×</button><div class="hero">'
-    + (p.image_url ? '<img id="heroimg" alt="' + esc(p.name) + '" src="' + esc(p.image_url) + '" title="Tap to view full size">' : "")
+    + (p.image_url ? '<img id="heroimg" alt="' + esc(p.name) + '" src="' + esc(hiRes(p.image_url)) + '" data-fb="' + esc(p.image_url) + '" onerror="imgFail(this)" title="Tap to view full size">' : "")
     + '<div style="flex:1;min-width:200px"><h2>' + esc(p.name) + '</h2><div class="kv">' + rows.map(r => '<span>' + r[0] + '</span><span>' + esc(r[1]) + '</span>').join("") + '</div>'
     + '<div class="row" style="margin-top:12px"><button class="btn" id="sheetcart">Add to cart</button>' + '<a class="iconbtn" style="text-decoration:none" target="_blank" rel="noopener" href="' + esc(ebaySoldUrl(p, qc ? qc[0] : owned[0] ? owned[0].condition : "NM", qc ? qc[1] : owned[0] ? owned[0].grade : "")) + '">eBay sold listings ↗' + (qc ? " (" + esc(qc[1] || COND[qc[0]] || qc[0]) + ")" : "") + '</a>' + (owned.length ? ' <button class="iconbtn" id="sheetlist">List for friends</button>' : "") + ' <button class="iconbtn" id="sheetgen">Create eBay listing</button></div></div></div>'
     + qaddHTML(p, qc || (owned[0] ? [owned[0].condition, owned[0].grade || ""] : ["NM", ""]))
@@ -1470,7 +1472,7 @@ async function openSheet(p, keepQ){
   $("x").onclick = closeSheet; $("sheetcart").onclick = () => openAddToCart(p, owned[0] ? owned[0].condition : "NM", owned[0] ? owned[0].grade : "");
   if ($("sheetlist")) $("sheetlist").onclick = () => openListing(p, owned);
   $("sheetgen").onclick = () => openListingGen(p, owned[0] || null);
-  if ($("heroimg")) $("heroimg").onclick = () => openViewer(p.image_url, p.name);
+  if ($("heroimg")) $("heroimg").onclick = () => openViewer($("heroimg").currentSrc || p.image_url, p.name);
   $("scrim").classList.add("open"); $("sheet").classList.add("open");
   renderSheetExtras(p, owned); bindQadd(p);
   renderSold(p, qc ? qc[0] : owned.length ? owned[0].condition : "NM", qc ? qc[1] : owned.length ? (owned[0].grade || "") : "");
