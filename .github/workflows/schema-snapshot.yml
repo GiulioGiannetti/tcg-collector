@@ -1,0 +1,65 @@
+# Keeps a copy of the Supabase database code (tables, views, functions, security rules,
+# scheduled jobs) in supabase/schema/, so changes can be reviewed and recovered.
+# Schema only: no rows, no user data. Secrets stay in Supabase Vault and are only referenced by name.
+#
+# Needs the repository secret SUPABASE_DB_URL: Supabase → Connect → "Session pooler" connection string
+# (with the database password filled in). Without it the job skips with a warning.
+name: Database schema snapshot
+
+on:
+  schedule:
+    - cron: "23 16 * * 0"   # weekly, Sunday
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: schema-snapshot
+  cancel-in-progress: false
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+    steps:
+      - name: Check for the database secret
+        id: secret
+        run: |
+          if [ -z "$SUPABASE_DB_URL" ]; then
+            echo "::warning::SUPABASE_DB_URL is not set, so the schema snapshot was skipped."
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.secret.outputs.ok == 'true'
+
+      - uses: supabase/setup-cli@v1
+        if: steps.secret.outputs.ok == 'true'
+        with:
+          version: latest
+
+      - name: Dump schema
+        if: steps.secret.outputs.ok == 'true'
+        run: |
+          mkdir -p supabase/schema
+          supabase db dump --db-url "$SUPABASE_DB_URL" --schema public -f supabase/schema/public.sql
+          # scheduled jobs live in the cron schema, which the dump above doesn't cover
+          psql "$SUPABASE_DB_URL" -X -q -A -t -c "
+            select '-- ' || jobname || E'\n' || 'select cron.schedule(' || quote_literal(jobname) || ', '
+                   || quote_literal(schedule) || ', ' || quote_literal(command) || ');' || E'\n'
+            from cron.job order by jobname" > supabase/schema/cron.sql
+
+      - name: Commit if changed
+        if: steps.secret.outputs.ok == 'true'
+        run: |
+          git add supabase/schema
+          if git diff --cached --quiet; then echo "Schema unchanged."; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Database schema snapshot $(date -u +%F)"
+          git push
