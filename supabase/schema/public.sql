@@ -1358,6 +1358,41 @@ end $$;
 ALTER FUNCTION "public"."import_collection"("p_lines" "jsonb") OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."import_pair_items"() RETURNS integer
+    LANGUAGE "plpgsql"
+    AS $_$
+declare r record; pick bigint; n int := 0; taken bigint[] := '{}';
+begin
+  update import_plan set item_id = null, current_product = null;
+  for r in
+    select e.*, card_key(e.card_number) ck,
+      (select count(*) from collection_items c join products p on p.id=c.product_id
+        where p.game_id=e.game_id and card_key(p.card_number)=card_key(e.card_number) and c.date_added is not distinct from e.d
+          and c.condition is not distinct from e.condition and c.quantity=e.quantity) ncand
+    from import_plan e order by 18, e.rn  -- rarest first
+  loop
+    select c.id into pick from collection_items c join products p on p.id=c.product_id
+     where p.game_id=r.game_id and card_key(p.card_number)=r.ck and c.date_added is not distinct from r.d
+       and c.condition is not distinct from r.condition and c.quantity=r.quantity and not (c.id = any(taken))
+     order by (p.set_id = r.target_set) desc,
+              (p.variant = r.variant) desc,
+              (lower(p.name) = lower(r.product_name)) desc,
+              (p.name ilike '%' || coalesce(substring(r.product_name from '\(([^)]*)\)\s*$'), '§') || '%') desc,
+              c.id
+     limit 1;
+    if pick is not null then
+      taken := taken || pick;
+      update import_plan set item_id = pick, current_product = (select product_id from collection_items where id = pick) where rn = r.rn;
+      n := n + 1;
+    end if;
+  end loop;
+  return n;
+end $_$;
+
+
+ALTER FUNCTION "public"."import_pair_items"() OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."is_connected"("a" "uuid", "b" "uuid") RETURNS boolean
     LANGUAGE "sql" STABLE SECURITY DEFINER
     SET "search_path" TO 'public'
@@ -3710,6 +3745,104 @@ CREATE TABLE IF NOT EXISTS "public"."img_probe_ptcg" (
 ALTER TABLE "public"."img_probe_ptcg" OWNER TO "postgres";
 
 
+CREATE OR REPLACE VIEW "public"."import_expect" AS
+ WITH "i" AS (
+         SELECT "row_number"() OVER (ORDER BY "ci"."ctid") AS "rn",
+            "ci"."game_id",
+            "ci"."series_name",
+            "ci"."set_name",
+            "ci"."product_name",
+            "ci"."card_number",
+            "ci"."rarity",
+            "ci"."variant",
+            "ci"."language",
+            "ci"."kind",
+            "ci"."condition",
+            "ci"."grade",
+            "ci"."quantity",
+            "ci"."cost_paid",
+            "ci"."date_added",
+            "ci"."notes",
+            "to_date"("ci"."date_added", 'DD/MM/YYYY'::"text") AS "d"
+           FROM "public"."collection_import" "ci"
+        ), "x" AS (
+         SELECT "i"."rn",
+            "i"."game_id",
+            "i"."series_name",
+            "i"."set_name",
+            "i"."product_name",
+            "i"."card_number",
+            "i"."rarity",
+            "i"."variant",
+            "i"."language",
+            "i"."kind",
+            "i"."condition",
+            "i"."grade",
+            "i"."quantity",
+            "i"."cost_paid",
+            "i"."date_added",
+            "i"."notes",
+            "i"."d",
+            (EXISTS ( SELECT 1
+                   FROM "public"."sets" "s"
+                  WHERE (("s"."game_id" = "i"."game_id") AND ("s"."language" = "i"."language") AND ("lower"("regexp_replace"("s"."name", '\s*\(JP\)$'::"text", ''::"text")) = "lower"("i"."set_name"))))) AS "own_lang_set",
+            ( SELECT "min"("s"."language") AS "min"
+                   FROM "public"."sets" "s"
+                  WHERE (("s"."game_id" = "i"."game_id") AND ("s"."language" <> "i"."language") AND ("lower"("regexp_replace"("s"."name", '\s*\(JP\)$'::"text", ''::"text")) = "lower"("i"."set_name")))) AS "other_lang"
+           FROM "i"
+        )
+ SELECT "rn",
+    "game_id",
+    "series_name",
+    "set_name",
+    "product_name",
+    "card_number",
+    "rarity",
+    "variant",
+    "language",
+    "kind",
+    "condition",
+    "grade",
+    "quantity",
+    "cost_paid",
+    "date_added",
+    "notes",
+    "d",
+    "own_lang_set",
+    "other_lang",
+        CASE
+            WHEN (("game_id" = 'pokemon'::"text") AND (NOT "own_lang_set") AND ("other_lang" IS NOT NULL)) THEN "other_lang"
+            ELSE "language"
+        END AS "exp_lang"
+   FROM "x";
+
+
+ALTER VIEW "public"."import_expect" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."import_plan" (
+    "rn" bigint NOT NULL,
+    "game_id" "text",
+    "exp_lang" "text",
+    "set_name" "text",
+    "card_number" "text",
+    "variant" "text",
+    "product_name" "text",
+    "d" "date",
+    "condition" "text",
+    "quantity" integer,
+    "target_set" bigint,
+    "target_product" bigint,
+    "item_id" bigint,
+    "current_product" bigint,
+    "action" "text",
+    "note" "text"
+);
+
+
+ALTER TABLE "public"."import_plan" OWNER TO "postgres";
+
+
 CREATE TABLE IF NOT EXISTS "public"."jp_logo_urls" (
     "file" "text" NOT NULL,
     "url" "text"
@@ -4735,6 +4868,11 @@ ALTER TABLE ONLY "public"."img_probe_ptcg"
 
 
 
+ALTER TABLE ONLY "public"."import_plan"
+    ADD CONSTRAINT "import_plan_pkey" PRIMARY KEY ("rn");
+
+
+
 ALTER TABLE ONLY "public"."jp_logo_urls"
     ADD CONSTRAINT "jp_logo_urls_pkey" PRIMARY KEY ("file");
 
@@ -5550,6 +5688,9 @@ ALTER TABLE "public"."img_probe" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."img_probe_ptcg" ENABLE ROW LEVEL SECURITY;
 
 
+ALTER TABLE "public"."import_plan" ENABLE ROW LEVEL SECURITY;
+
+
 ALTER TABLE "public"."jp_logo_urls" ENABLE ROW LEVEL SECURITY;
 
 
@@ -6080,6 +6221,12 @@ GRANT ALL ON FUNCTION "public"."i_follow"("owner" "uuid") TO "service_role";
 GRANT ALL ON FUNCTION "public"."import_collection"("p_lines" "jsonb") TO "anon";
 GRANT ALL ON FUNCTION "public"."import_collection"("p_lines" "jsonb") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."import_collection"("p_lines" "jsonb") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."import_pair_items"() TO "anon";
+GRANT ALL ON FUNCTION "public"."import_pair_items"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."import_pair_items"() TO "service_role";
 
 
 
@@ -6758,6 +6905,14 @@ GRANT ALL ON TABLE "public"."img_probe" TO "service_role";
 GRANT ALL ON TABLE "public"."img_probe_ptcg" TO "anon";
 GRANT ALL ON TABLE "public"."img_probe_ptcg" TO "authenticated";
 GRANT ALL ON TABLE "public"."img_probe_ptcg" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."import_expect" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."import_plan" TO "service_role";
 
 
 
