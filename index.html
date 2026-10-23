@@ -802,21 +802,22 @@ async function suggest(v){
   const seq = ++sugSeq, lv = v.toLowerCase(); let items = [];
   if (st.tab === "collection") {
     const seen = new Set();
-    st.col.forEach(c => { const p = c.products; if (!p || seen.has(p.id)) return; if ((p.name + " " + (p.card_number || "")).toLowerCase().includes(lv)) { seen.add(p.id); items.push(Object.assign({}, p, { set_name:setOf(p).name, owned:true })); } });
+    st.col.forEach(c => { const p = c.products; if (!p || seen.has(p.id)) return; if ((p.name + " " + (p.card_number || "")).toLowerCase().includes(lv)) { seen.add(p.id); items.push(Object.assign({}, p, { set_name:setOf(p).name, release_date:setOf(p).release_date, owned:true })); } });
   } else {
     const t = v.replace(/[,()%*]/g, " ");
-    let q = sb.from("catalog_v").select("id,name,card_number,variant,language,kind,image_url,game_id,set_id,rarity,special,set_name,owned").or("name.ilike.%" + t + "%,card_number.ilike.%" + t + "%");
+    let q = sb.from("catalog_v").select("id,name,card_number,variant,language,kind,image_url,game_id,set_id,rarity,special,set_name,owned,release_date,card_num_int").or("name.ilike.%" + t + "%,card_number.ilike.%" + t + "%")
+      .order("release_date", { ascending:false, nullsFirst:false }).order("card_num_int", { ascending:true, nullsFirst:false });
     if (st.games.length) q = q.in("game_id", st.games);
     if (st.lang !== "all") q = q.eq("language", st.lang);
     const { data } = await q.limit(40); items = data || [];
   }
   if (seq !== sugSeq || $("q").value.trim() !== v) return;
   const rank = p => { const n = (p.name || "").toLowerCase(); return (n.startsWith(lv) ? 0 : n.includes(" " + lv) ? 1 : (p.card_number || "").toLowerCase().startsWith(lv) ? 2 : 3) - (p.owned ? .5 : 0); };
-  items.sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name)); items = items.slice(0, 8);
+  items.sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name) || String(b.release_date || "").localeCompare(String(a.release_date || "")) || numKey(a.card_number) - numKey(b.card_number)); items = items.slice(0, 8);
   const box = $("suggest");
   if (!items.length) { box.innerHTML = '<div class="sgmore">No items match “' + esc(v) + '”</div>'; box.hidden = false; return; }
   box.innerHTML = items.map((p, i) => '<button type="button" class="sg" role="option" data-i="' + i + '">' + (p.image_url ? '<img alt="" loading="lazy" src="' + esc(p.image_url) + '" onerror="this.replaceWith(Object.assign(document.createElement(\'span\'),{className:\'sgph\'}))">' : '<span class="sgph"></span>')
-    + '<span class="sgt"><span class="sgn">' + hl(p.name, v) + '</span><span class="sgs">' + esc([setLabel({ name:p.set_name || setOf(p).name, language:p.language }), p.card_number].filter(Boolean).join(" · ")) + '</span></span>' + (p.owned ? '<span class="sgo">✓ Owned</span>' : "") + '</button>').join("")
+    + '<span class="sgt"><span class="sgn">' + hl(p.name, v) + '</span><span class="sgs">' + esc([setLabel({ name:p.set_name || setOf(p).name, language:p.language }), p.card_number, p.variant && p.variant !== "Normal" ? p.variant : ""].filter(Boolean).join(" · ")) + '</span></span>' + (p.owned ? '<span class="sgo">✓ Owned</span>' : "") + '</button>').join("")
     + '<div class="sgmore">Press Enter to see every match in the grid</div>';
   box.hidden = false;
   box.querySelectorAll(".sg").forEach(b => { b.onmousedown = e => e.preventDefault();
@@ -1407,7 +1408,7 @@ async function renderCatalog(reset){
   if (st.specials.length) q = q.in("special", st.specials);
   if (st.owned !== "all") q = q.eq("owned", st.owned === "owned");
   if (st.q) { const t = st.q.replace(/[,()%*]/g, " "); q = q.or("name.ilike.%" + t + "%,card_number.ilike.%" + t + "%"); }
-  const order = { "name":[["name",true]], "-name":[["name",false]], "value":[["name",true]], "set":[["set_name",true],["card_number",true]], "num":[["set_name",true],["card_num_int",true]], "-num":[["set_name",true],["card_num_int",false]],
+  const order = { "name":[["name",true],["release_date",false],["card_num_int",true]], "-name":[["name",false],["release_date",false],["card_num_int",true]], "value":[["name",true]], "set":[["set_name",true],["card_number",true]], "num":[["set_name",true],["card_num_int",true]], "-num":[["set_name",true],["card_num_int",false]],
     "newest":[["release_date",false],["set_name",true],["card_num_int",true]], "oldest":[["release_date",true],["set_name",true],["card_num_int",true]], "added":[["created_at",false]], "qty":[["name",true]] }[st.sort];
   order.forEach(([c, a]) => q = q.order(c, { ascending:a, nullsFirst:false }));
   if (reset) { st.cat = []; $("grid").innerHTML = '<div class="empty">Loading catalog…</div>'; }
