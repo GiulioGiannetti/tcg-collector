@@ -92,7 +92,12 @@ async function setup(page, opts = {}){
     log.push({ table, params: Object.fromEntries(params) });
     let rows = (db[table] || []).slice();
     for (const [k, v] of params) {
-      if (["select", "order", "limit", "offset", "or"].includes(k)) continue;
+      if (["select", "order", "limit", "offset"].includes(k)) continue;
+      if (k === "or") {   // "(name.ilike.%x%,card_number.ilike.%x%)"
+        const parts = v.replace(/^\(|\)$/g, "").split(",").map(x => { const i = x.indexOf("."); return [x.slice(0, i), x.slice(i + 1)]; });
+        rows = rows.filter(row => parts.some(([col, expr]) => matches(row, col, expr)));
+        continue;
+      }
       rows = rows.filter(row => matches(row, k, v));
     }
     const total = rows.length;
