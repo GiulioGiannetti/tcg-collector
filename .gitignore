@@ -1,3 +1,19 @@
 node_modules/
 test-results/
 playwright-report/
+
+# Secrets and private data: never commit (keys live in Supabase secrets / Cloudflare env settings)
+.env
+.env.*
+!.env.example
+.dev.vars
+*.pem
+*.key
+*.p12
+secrets/
+backups/
+backup/
+*.dump
+lifeos*.sql
+lifeos*.json
+lifeos-tier2-*
