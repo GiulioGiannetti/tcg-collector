@@ -10,6 +10,7 @@ on:
     # only when something that is actually published changes (not tests, package files or docs)
     paths:
       - "*.html"
+      - "brand.css"
       - "sw.js"
       - "manifest.webmanifest"
       - "icon-*.png"
@@ -35,6 +36,7 @@ jobs:
           fetch-depth: 1
           sparse-checkout: |
             /*.html
+            /brand.css
             /sw.js
             /manifest.webmanifest
             /icon-*.png
@@ -44,7 +46,7 @@ jobs:
       - name: Collect site files
         run: |
           mkdir _site
-          cp index.html sw.js manifest.webmanifest welcome.html terms.html privacy.html credits.html icon-192.png icon-512.png _site/
+          cp index.html brand.css sw.js manifest.webmanifest welcome.html terms.html privacy.html credits.html icon-192.png icon-512.png _site/
 
       - name: Deploy
         if: env.CLOUDFLARE_API_TOKEN != '' && env.CLOUDFLARE_ACCOUNT_ID != ''
